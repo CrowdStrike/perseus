@@ -1,0 +1,28 @@
+
+# go module workspace file
+go.work
+go.work.sum
+
+# IDE/Editor setup
+.idea
+.vscode
+.project
+.settings
+
+# test/debugging/profiling
+*.test
+*profile.out
+
+# :shaking_fist: OSX
+._.DS_Store
+.DS_Store
+
+# Distribution files
+dist/
+
+# project-local binaries
+bin/
+
+# Misc.
+environ.rc*
+scrap*.*

@@ -1,0 +1,391 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Perseus - Defeating the Kraken that is Go Modules dependency graphs",
+    "version": "0.1"
+  },
+  "tags": [
+    {
+      "name": "PerseusService"
+    }
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/v1/modules": {
+      "get": {
+        "summary": "Lists known modules.",
+        "description": "If specified, 'filter' should contain a pattern (type TBD) to match against the modules' names.\nThe returned elements will contain no versions, only the highest version, or all versions,\nbased on the value of the 'version_option' field.",
+        "operationId": "PerseusService_ListModules",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/perseusapiListModulesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "PerseusService"
+        ]
+      },
+      "put": {
+        "summary": "Adds a module, along with any versions provided, to the system",
+        "operationId": "PerseusService_CreateModule",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/perseusapiCreateModuleResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/perseusapiCreateModuleRequest"
+            }
+          }
+        ],
+        "tags": [
+          "PerseusService"
+        ]
+      }
+    },
+    "/api/v1/modules/{moduleName}/versions/{versionOption}": {
+      "get": {
+        "summary": "Lists versions of the specified module, either the latest or all",
+        "operationId": "PerseusService_ListModuleVersions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/perseusapiListModuleVersionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "moduleName",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "versionOption",
+            "in": "path",
+            "required": true,
+            "type": "string",
+            "enum": [
+              "none",
+              "latest",
+              "all"
+            ]
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "PerseusService"
+        ]
+      }
+    },
+    "/api/v1/modules/{moduleName}/versions/{version}/deps": {
+      "get": {
+        "summary": "Queries direct dependencies of a specific version of a module.",
+        "description": "The 'direction' indicate whether or not the returned list contains dependencies (things the\nspecified module depends on) or dependents (things that depend on the specified module).",
+        "operationId": "PerseusService_QueryDependencies",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/perseusapiQueryDependenciesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "moduleName",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "direction",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "dependencies",
+              "dependents"
+            ],
+            "default": "dependencies"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "PerseusService"
+        ]
+      },
+      "put": {
+        "summary": "Adds or updates the direct dependencies of specific version of a module.",
+        "description": "When invoking this API, the 'versions' attribute of each specified dependency must contain exactly 1 item",
+        "operationId": "PerseusService_UpdateDependencies",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/perseusapiUpdateDependenciesResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "moduleName",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "dependencies",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/perseusapiModule"
+              }
+            }
+          }
+        ],
+        "tags": [
+          "PerseusService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "perseusapiCreateModuleRequest": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "$ref": "#/definitions/perseusapiModule"
+        }
+      }
+    },
+    "perseusapiCreateModuleResponse": {
+      "type": "object",
+      "properties": {
+        "module": {
+          "$ref": "#/definitions/perseusapiModule"
+        }
+      }
+    },
+    "perseusapiDependencyDirection": {
+      "type": "string",
+      "enum": [
+        "dependencies",
+        "dependents"
+      ],
+      "default": "dependencies"
+    },
+    "perseusapiListModuleVersionsResponse": {
+      "type": "object",
+      "properties": {
+        "moduleName": {
+          "type": "string"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "nextPageToken": {
+          "type": "string"
+        }
+      }
+    },
+    "perseusapiListModulesResponse": {
+      "type": "object",
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/perseusapiModule"
+          }
+        },
+        "nextPageToken": {
+          "type": "string"
+        }
+      }
+    },
+    "perseusapiModule": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "The name corresponds directly to the name attribute in the Go module's go.mod file and\nuniquely identifies a specific module"
+        },
+        "versions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "title": "A list of 0 or more Semantic Version strings that define released versions of the module"
+        }
+      },
+      "description": "A Module is the sole entity within the system, uniquely identified by its name."
+    },
+    "perseusapiModuleVersionOption": {
+      "type": "string",
+      "enum": [
+        "none",
+        "latest",
+        "all"
+      ],
+      "default": "none"
+    },
+    "perseusapiQueryDependenciesResponse": {
+      "type": "object",
+      "properties": {
+        "modules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/perseusapiModule"
+          }
+        },
+        "nextPageToken": {
+          "type": "string"
+        }
+      }
+    },
+    "perseusapiUpdateDependenciesResponse": {
+      "type": "object"
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    }
+  }
+}

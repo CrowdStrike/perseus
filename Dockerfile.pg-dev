@@ -1,0 +1,13 @@
+ARG POSTGRES_VERSION=14
+FROM postgres:${POSTGRES_VERSION}
+
+ARG SEMVER_VERSION=0.31.2
+ARG POSTGRES_VERSION
+
+WORKDIR /tmp
+ADD "https://github.com/theory/pg-semver/releases/download/v${SEMVER_VERSION}/semver-${SEMVER_VERSION}.zip" .
+RUN apt-get update -qq && apt-get install -yqqq zip build-essential postgresql-server-dev-${POSTGRES_VERSION%.*} \
+    && unzip "semver-${SEMVER_VERSION}.zip" -d . \
+    && cd "semver-${SEMVER_VERSION}" \
+    && make \
+    && make install

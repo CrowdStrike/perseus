@@ -1,0 +1,21 @@
+version: '3.8'
+services:
+  db:
+    build: 
+      context: .
+      dockerfile: Dockerfile.pg-dev
+      args:
+        SEMVER_VERSION: 0.31.2
+    restart: always
+    environment:
+      - POSTGRES_DB=perseus
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - '5432:5432'
+    volumes: 
+      - db:/var/lib/postgresql/data
+      - ./store:/docker-entrypoint-initdb.d
+volumes:
+  db:
+    driver: local

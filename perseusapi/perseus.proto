@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package crowdstrike.perseus.perseusapi;
+
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+// tweak OpenAPI metadata
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info {
+    title: "Perseus - Defeating the Kraken that is Go Modules dependency graphs"
+    version: "0.1"
+  }
+  schemes: HTTP
+  schemes: HTTPS
+  consumes: "application/json"
+  produces: "application/json"
+};
+
+// A Module is the sole entity within the system, uniquely identified by its name.
+message Module {
+  // The name corresponds directly to the name attribute in the Go module's go.mod file and
+  // uniquely identifies a specific module
+  string name = 1;
+  // A list of 0 or more Semantic Version strings that define released versions of the module
+  repeated string versions = 2;
+}
+
+service PerseusService {
+  // Adds a module, along with any versions provided, to the system
+  rpc CreateModule(CreateModuleRequest) returns (CreateModuleResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/modules"
+      body: "*"
+    };
+  }
+
+  // Lists known modules.
+  //
+  // If specified, 'filter' should contain a pattern (type TBD) to match against the modules' names.
+  // The returned elements will contain no versions, only the highest version, or all versions,
+  // based on the value of the 'version_option' field.
+  rpc ListModules(ListModulesRequest) returns (ListModulesResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/modules"
+    };
+  }
+
+  // Lists versions of the specified module, either the latest or all
+  rpc ListModuleVersions(ListModuleVersionsRequest) returns (ListModuleVersionsResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/modules/{module_name}/versions/{version_option}"
+    };
+  }
+
+  // Adds or updates the direct dependencies of specific version of a module.
+  //
+  // When invoking this API, the 'versions' attribute of each specified dependency must contain exactly 1 item
+  rpc UpdateDependencies(UpdateDependenciesRequest) returns (UpdateDependenciesResponse) {
+    option (google.api.http) = {
+      put: "/api/v1/modules/{module_name}/versions/{version}/deps"
+      body: "dependencies"
+    };
+  }
+
+  // Queries direct dependencies of a specific version of a module.
+  //
+  // The 'direction' indicate whether or not the returned list contains dependencies (things the
+  // specified module depends on) or dependents (things that depend on the specified module).
+  rpc QueryDependencies(QueryDependenciesRequest) returns (QueryDependenciesResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/modules/{module_name}/versions/{version}/deps"
+    };
+  }
+}
+
+message CreateModuleRequest {
+  Module module = 1;
+}
+
+message CreateModuleResponse {
+  Module module = 1;
+}
+
+enum ModuleVersionOption {
+  none = 0;
+  latest = 1;
+  all = 2;
+}
+
+message ListModulesRequest {
+  string filter = 1;
+
+  string page_token = 2;
+  int32 page_size = 3;
+}
+
+message ListModulesResponse {
+  repeated Module modules = 1;
+
+  string next_page_token = 2;
+}
+
+message ListModuleVersionsRequest {
+  string module_name = 1;
+  ModuleVersionOption version_option = 2;
+
+  string page_token = 3;
+  int32 page_size = 4;
+}
+
+message ListModuleVersionsResponse {
+  string module_name = 1;
+  repeated string versions = 2;
+
+  string next_page_token = 3;
+}
+
+message UpdateDependenciesRequest {
+  string module_name = 1;
+  string version = 2;
+  repeated Module dependencies = 3;
+}
+
+message UpdateDependenciesResponse {}
+
+enum DependencyDirection {
+  dependencies = 0;
+  dependents = 2;
+}
+
+message QueryDependenciesRequest {
+  string module_name = 1;
+  string version = 2;
+  DependencyDirection direction = 3;
+
+  string page_token = 4;
+  int32 page_size = 5;
+}
+
+message QueryDependenciesResponse {
+  repeated Module modules = 1;
+
+  string next_page_token = 2;
+}
+
+service HealthZService {}
