@@ -53,7 +53,7 @@ type serverConfig struct {
 
 type serverOption func(*serverConfig) error
 
-func withAddress(addr string) serverOption {
+func withAddress(addr string) serverOption { //nolint: deadcode,unused // not used *yet*
 	return func(o *serverConfig) error {
 		o.listenAddr = addr
 		return nil
