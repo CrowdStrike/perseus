@@ -9,14 +9,10 @@ all: protos bin
 	$(info TODO)
 
 .PHONY: protos
-protos: install-tools
+protos: install-tools check-buf-install
 	$(info Generating Go code from Protobuf definitions...)
 	@buf generate ./perseusapi
 	@buf build ./perseusapi -o ./perseusapi/perseusapi.protoset
-
-.PHONY: lint-protos
-lint-protos:
-	@buf lint ./perseusapi
 
 .PHONY: test
 test:
@@ -38,4 +34,43 @@ ensure-local-bin-dir:
 
 .PHONY: bin
 bin: ensure-local-bin-dir
-	go build -o ${PROJECT_BASE_DIR}/bin/perseus .
+	@go build -o ${PROJECT_BASE_DIR}/bin/perseus -ldflags='-X main.BuildDate=$(shell date -u +'%FT%R:%S') -X main.BuildVersion=v0.0.0-localdev.$(shell whoami).$(shell date -u +'%Y%m%d%H%M%S')' .
+
+.PHONY: install
+install:
+	@go install -ldflags='-X main.BuildDate=$(shell date -u +'%FT%R:%S') -X main.BuildVersion=v0.0.0-localdev.$(shell whoami).$(shell date -u +'%Y%m%d%H%M%S')' .
+
+.PHONY: lint
+lint: lint-protos lint-go
+
+.PHONY: lint-go
+lint-go: check-golangci-lint-install
+	$(info Linting Go code ...)
+	@golangci-lint run ./...
+
+.PHONY: lint-protos
+lint-protos: check-buf-install
+	$(info Linting Protobuf files ...)
+	@buf lint ./perseusapi
+
+.PHONY: snapshot
+snapshot: check-goreleaser-install
+	@goreleaser release --snapshot --rm-dist
+
+.PHONY: check-buf-install
+check-buf-install:
+ifeq ("$(shell command -v buf)", "")
+	$(error buf was not found.  Please install it using the method of your choice. (https://docs.buf.build/installation))
+endif
+
+.PHONY: check-golangci-lint-install
+check-golangci-lint-install:
+ifeq ("$(shell command -v golangci-lint)", "")
+	$(error golangci-lint was not found.  Please install it using the method of your choice. (https://golangci-lint.run/usage/install/#local-installation))
+endif
+
+.PHONY: check-goreleaser-install
+check-goreleaser-install:
+ifeq ("$(shell command -v goreleaser)", "")
+	$(error goreleaser was not found.  Please install it using the method of your choice. (https://goreleaser.com/install))
+endif
