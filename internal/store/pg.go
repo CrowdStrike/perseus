@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"strconv"
@@ -38,39 +39,45 @@ type PostgresClient struct {
 // ensure the PG client satisfies the Store interface
 var _ Store = (*PostgresClient)(nil)
 
+// NewPostgresClient initializes a store client for interacting with a
+// PostgreSQL backend. If it can not immediately reach the target database, an
+// error is returned.
+func NewPostgresClient(ctx context.Context, url string, opts ...PGOption) (*PostgresClient, error) {
+	db, err := sqlx.ConnectContext(ctx, "pgx", url)
+	if err != nil {
+		return nil, err
+	}
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &PostgresClient{
+		db: db,
+	}, nil
+}
+
 // SaveModule upserts module metadata. If there is an existing module with the provided name the
 // description will be updated.  Otherwise, a new module will be inserted.
-func (p *PostgresClient) SaveModule(ctx context.Context, name, description string) (int32, error) {
+func (p *PostgresClient) SaveModule(ctx context.Context, name, description string) (id int32, err error) {
 	if name == "" {
 		return -1, fmt.Errorf("module name must be provided")
 	}
 
-	sql, args, err := psql.
-		Insert(tableModules).
-		Columns(columnsModules[1:]...). // don't provide ID on an insert
-		Values(name, description).
-		Suffix(`ON CONFLICT (name) DO UPDATE SET description = ? RETURNING id`, description).
-		ToSql()
+	var txn *sql.Tx
+	txn, err = p.db.BeginTx(ctx, nil)
 	if err != nil {
-		return 0, fmt.Errorf("error constructing database command: %w", err)
+		return 0, fmt.Errorf("unable to start a database transaction: %w", err)
 	}
-	res, err := p.db.QueryContext(ctx, sql, args...)
-	if err != nil {
-		return 0, fmt.Errorf("error executing database command: %w", err)
-	}
-	defer func() { _ = res.Close() }()
 
-	if !res.Next() {
-		return 0, fmt.Errorf("database insert modified 0 rows")
-	}
-	var moduleID int32
-	if err = res.Scan(&moduleID); err != nil {
-		return 0, fmt.Errorf("error processing database command result: %w", err)
-	}
-	if res.Next() {
-		return 0, fmt.Errorf("database insert modified more than 1 row")
-	}
-	return moduleID, err
+	defer func() {
+		if err == nil {
+			err = txn.Commit()
+		} else {
+			err = txn.Rollback()
+		}
+	}()
+
+	return writeModule(ctx, txn, name, description)
 }
 
 // GetModules retrieves modules by name or ID, where if no keys are provided, all modules are returned.
@@ -140,15 +147,27 @@ func (p *PostgresClient) QueryModules(ctx context.Context, nameFilter string, pa
 }
 
 // SaveModuleVersions ...
-func (p *PostgresClient) SaveModuleVersions(ctx context.Context, moduleID int32, versions ...string) error {
+func (p *PostgresClient) SaveModuleVersions(ctx context.Context, moduleID int32, versions ...string) (err error) {
 	if moduleID == 0 {
 		return fmt.Errorf("moduleID must be provided")
 	}
 	var (
 		cmd  string
 		args []interface{}
-		err  error
+		txn  *sql.Tx
 	)
+
+	txn, err = p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("unable to start database transaction: %w", err)
+	}
+	defer func() {
+		if err == nil {
+			err = txn.Commit()
+		} else {
+			_ = txn.Rollback()
+		}
+	}()
 
 	for i, ver := range versions {
 		cmd, args, err = psql.
@@ -161,7 +180,7 @@ func (p *PostgresClient) SaveModuleVersions(ctx context.Context, moduleID int32,
 			return fmt.Errorf("error constructing SQL operation for versions[%d] (%v): %w", i, ver, err)
 		}
 
-		_, err = p.db.ExecContext(ctx, cmd, args...)
+		_, err = txn.ExecContext(ctx, cmd, args...)
 		if err != nil {
 			return fmt.Errorf("error executing database operation for versions[%d] (%v): %w", i, ver, err)
 		}
@@ -231,7 +250,7 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string,
 		return nil, "", fmt.Errorf("the module name must be specified")
 	}
 	q := psql.
-		Select("mv.id", "mv.module_id", "'v' || mv.version AS version").
+		Select("mv.id", "mv.module_id", "mv.version AS version").
 		From(tableModuleVersions + " mv").
 		Join(tableModules + " m ON (m.id = mv.module_id)").
 		Where(sq.Eq{"m.name": module}).
@@ -263,18 +282,178 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string,
 // GetDependents retrieves all known module versions that depend on the given
 // module id and version pair.
 func (p *PostgresClient) GetDependents(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error) {
-	return p.getDependx(ctx, id, version, joinTargetDependents, pageToken, count)
+	return getDependx(ctx, p.db, id, version, joinTargetDependents, pageToken, count)
 }
 
 // GetDependees retrieves all known module versions that the given module id
 // and version pair depend on.
 func (p *PostgresClient) GetDependees(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error) {
-	return p.getDependx(ctx, id, version, joinTargetDependees, pageToken, count)
+	return getDependx(ctx, p.db, id, version, joinTargetDependees, pageToken, count)
+}
+
+// SaveModuleDependencies writes the specified set of direct dependencies of mod to the database.
+func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version, deps ...Version) (err error) {
+	if mod.ModuleID == "" || mod.SemVer == "" {
+		return fmt.Errorf("invalid module, both the module name and version must be specified")
+	}
+	if len(deps) == 0 {
+		return nil
+	}
+	var txn *sql.Tx
+	txn, err = p.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("unable to start a database transaction: %w", err)
+	}
+	defer func() {
+		if err == nil {
+			err = txn.Commit()
+		} else {
+			_ = txn.Rollback()
+		}
+	}()
+
+	if _, err := writeModule(ctx, txn, mod.ModuleID, ""); err != nil {
+		return err
+	}
+	dependentID, err := getModuleVersionID(ctx, txn, mod.ModuleID, mod.SemVer)
+	if err != nil {
+		return err
+	}
+
+	cmd := psql.
+		Insert("module_dependency").
+		Columns("dependent_id", "dependee_id")
+	for _, d := range deps {
+		if _, err := writeModule(ctx, txn, d.ModuleID, ""); err != nil {
+			return err
+		}
+		dependeeID, err := getModuleVersionID(ctx, txn, d.ModuleID, d.SemVer)
+		if err != nil {
+			return err
+		}
+		cmd = cmd.Values(dependentID, dependeeID)
+	}
+	sql, args, err := cmd.Suffix("ON CONFLICT (dependent_id, dependee_id) DO NOTHING").ToSql()
+	log.Printf("upsert module dependencies: sql=%s args=%v err=%v\n", sql, args, err)
+	if err != nil {
+		return fmt.Errorf("error constructing SQL query: %w", err)
+	}
+	if _, err = txn.ExecContext(ctx, sql, args...); err != nil {
+		return fmt.Errorf("database error saving new module dependency: %w", err)
+	}
+	return nil
+}
+
+// getModuleVersionID executes a database query to translate the specified module and version to the
+// corresponding PKEY in the module_version table, creating the module and/or version if necessary
+func getModuleVersionID(ctx context.Context, db queryer, mod, ver string) (int32, error) {
+	q := psql.
+		Select("mv.id").
+		From("module_version mv").
+		Join("module m ON (m.id = mv.module_id)").
+		Where(sq.Eq{"mv.version": ver}).
+		Where(sq.Eq{"m.name": mod})
+	sql, args, err := q.ToSql()
+	log.Printf("translate module name/version to ID: sql=%s args=%v err=%v\n", sql, args, err)
+	if err != nil {
+		return 0, fmt.Errorf("error constructing SQL query: %w", err)
+	}
+
+	rows, err := db.QueryContext(ctx, sql, args...)
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		if e := rows.Close(); e != nil {
+			log.Println("error closing sql.Rows:", e)
+		}
+	}()
+	var id int32
+	for rows.Next() {
+		if id != 0 {
+			return 0, fmt.Errorf("module/version lookup returned >1 row")
+		}
+		if err := rows.Scan(&id); err != nil {
+			return 0, err
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("error processing database query results: %w", err)
+	}
+	return id, nil
+}
+
+// applyNameFilter parses the specified filter string and appends an appropriate WHERE clause to the
+// provided sq.SelectBuilder.
+//
+// The filter string should be a glob pattern ('*' and '?' for wildcards).  If the filter doesn't contain
+// any wildcards it is treated as a substring match.
+func applyNameFilter(q sq.SelectBuilder, nameFilter string) sq.SelectBuilder {
+	if nameFilter == "" {
+		return q
+	}
+	// translate glob ? and * wildcards to SQL equivalents
+	where := strings.Map(func(c rune) rune {
+		switch c {
+		case '?':
+			return '_'
+		case '*':
+			return '%'
+		default:
+			return c
+		}
+	}, nameFilter)
+	// treat a filter with no wildards as a "contains" substring match
+	if !strings.ContainsAny(where, "%_") {
+		where = "%" + where + "%"
+	}
+	return q.Where(sq.Like{"name": where})
+}
+
+// queryer defines a type that can query a database.
+//
+// We define this interface so that we can write code that treats sql.DB and sql.Tx interchangeably
+type queryer interface {
+	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
+}
+
+// writeModule upserts a module into the database using the specified queryer
+func writeModule(ctx context.Context, db queryer, name, description string) (int32, error) {
+	var desc interface{}
+	if description != "" {
+		desc = description
+	}
+	sql, args, err := psql.
+		Insert(tableModules).
+		Columns(columnsModules[1:]...). // don't provide ID on an insert
+		Values(name, desc).
+		Suffix(`ON CONFLICT (name) DO UPDATE SET description = ? RETURNING id`, desc).
+		ToSql()
+	if err != nil {
+		return 0, fmt.Errorf("error constructing database command: %w", err)
+	}
+	res, err := db.QueryContext(ctx, sql, args...)
+	if err != nil {
+		return 0, fmt.Errorf("error executing database command: %w", err)
+	}
+	defer func() { _ = res.Close() }()
+
+	if !res.Next() {
+		return 0, fmt.Errorf("database insert modified 0 rows")
+	}
+	var moduleID int32
+	if err = res.Scan(&moduleID); err != nil {
+		return 0, fmt.Errorf("error processing database command result: %w", err)
+	}
+	if res.Next() {
+		return 0, fmt.Errorf("database insert modified more than 1 row")
+	}
+	return moduleID, err
 }
 
 // getDependx is a shared query for dependency gathering in either direction,
 // dependent on the joinType.
-func (p *PostgresClient) getDependx(ctx context.Context, module, version, joinType string, pageToken string, count int) ([]Version, string, error) {
+func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType string, pageToken string, count int) ([]Version, string, error) {
 	pageTokenKey := "moduleversions:" + module + version + ":" + joinType
 	offset := 0
 	if pageToken != "" {
@@ -290,7 +469,6 @@ func (p *PostgresClient) getDependx(ctx context.Context, module, version, joinTy
 	if version == "" {
 		return nil, "", fmt.Errorf("version mut not be blank")
 	}
-	version = strings.TrimPrefix(version, "v")
 
 	q := psql.
 		Select("rhs.version_id id", "rhs.name module_id", "rhs.version").
@@ -321,49 +499,10 @@ func (p *PostgresClient) getDependx(ctx context.Context, module, version, joinTy
 	}
 	log.Printf("getDependx():\n\tsql: %s\n\targs: %v\n", sql, args)
 	var dependents []Version
-	err = p.db.SelectContext(ctx, &dependents, sql, args...)
+	err = db.SelectContext(ctx, &dependents, sql, args...)
 	if err != nil {
 		return nil, "", err
 	}
 
 	return dependents, encodePageToken(pageTokenKey, len(dependents), offset, count), nil
-}
-
-// NewPostgresClient initializes a store client for interacting with a
-// PostgreSQL backend. If it can not immediately reach the target database, an
-// error is returned.
-func NewPostgresClient(ctx context.Context, url string, opts ...PGOption) (*PostgresClient, error) {
-	db, err := sqlx.ConnectContext(ctx, "pgx", url)
-	if err != nil {
-		return nil, err
-	}
-	err = db.PingContext(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return &PostgresClient{
-		db: db,
-	}, nil
-}
-
-func applyNameFilter(q sq.SelectBuilder, nameFilter string) sq.SelectBuilder {
-	if nameFilter == "" {
-		return q
-	}
-	// translate glob ? and * wildcards to SQL equivalents
-	where := strings.Map(func(c rune) rune {
-		switch c {
-		case '?':
-			return '_'
-		case '*':
-			return '%'
-		default:
-			return c
-		}
-	}, nameFilter)
-	// treat a filter with no wildards as a "contains" substring match
-	if !strings.ContainsAny(where, "%_") {
-		where = "%" + where + "%"
-	}
-	return q.Where(sq.Like{"name": where})
 }
