@@ -393,18 +393,21 @@ func applyNameFilter(q sq.SelectBuilder, nameFilter string) sq.SelectBuilder {
 		return q
 	}
 	// translate glob ? and * wildcards to SQL equivalents
+	hasWildcards := false
 	where := strings.Map(func(c rune) rune {
 		switch c {
 		case '?':
+			hasWildcards = true
 			return '_'
 		case '*':
+			hasWildcards = true
 			return '%'
 		default:
 			return c
 		}
 	}, nameFilter)
 	// treat a filter with no wildards as a "contains" substring match
-	if !strings.ContainsAny(where, "%_") {
+	if !hasWildcards {
 		where = "%" + where + "%"
 	}
 	return q.Where(sq.Like{"name": where})
