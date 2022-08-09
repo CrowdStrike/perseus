@@ -23,6 +23,10 @@ type grpcServer struct {
 	store store.Store
 }
 
+var (
+	reMatchModuleMajorVersion = regexp.MustCompile(`.+/v([2-9][0-9]*)$`)
+)
+
 // NewGRPCServer constructs and returns a new gRPC server instance
 func NewGRPCServer(store store.Store) perseusapi.PerseusServiceServer {
 	s := grpcServer{
@@ -49,8 +53,7 @@ func (s *grpcServer) CreateModule(ctx context.Context, req *perseusapi.CreateMod
 		}
 	} else {
 		sv := "v0.0.0"
-		re := regexp.MustCompile(`.+/v([2-9][0-9]*)$`)
-		matches := re.FindStringSubmatch(m.GetName())
+		matches := reMatchModuleMajorVersion.FindStringSubmatch(m.GetName())
 		if len(matches) == 2 {
 			sv = "v" + matches[1] + ".0.0"
 		}
