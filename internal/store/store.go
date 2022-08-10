@@ -14,4 +14,6 @@ type Store interface {
 
 	GetDependents(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error)
 	GetDependees(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error)
+
+	SaveModuleDependencies(ctx context.Context, mod Version, deps ...Version) error
 }

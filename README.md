@@ -50,7 +50,7 @@ both in-house and hosted in AWS.
 
 The `perseus` service exposes a gRPC API, along with JSON/REST mappings using the [gRPC Gateway](https://github.com/grpc-ecosystem/grpc-gateway)
 project for exposure to web-based consumers.  Both endpoints, plus a very basic web UI for testing,
-are served on a single port using [cmux](https://github.com/soheihly/cmux).
+are served on a single port using [cmux](https://github.com/soheilhy/cmux).
 
 ##### Service Operations
 
