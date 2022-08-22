@@ -34,7 +34,7 @@ func readClientConfigEnv() []clientOption {
 	return opts
 }
 
-// readClientConfigFlags scans the CLi flags in the provided flag set and returns a list of 0 or more
+// readClientConfigFlags scans the CLI flags in the provided flag set and returns a list of 0 or more
 // config options
 func readClientConfigFlags(fset *pflag.FlagSet) []clientOption {
 	var opts []clientOption
