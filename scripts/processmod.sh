@@ -14,11 +14,11 @@ trap cleanup EXIT
 
 # use explicit module path at $1, if specified.  otherwise default to PWD.
 _PERSEUS_MODULE_PATH=$1
-if [ -n "${_PERSEUS_MODULE_PATH}" ] && [ "${_PERSEUS_MODULE_PATH}" != "$(pwd)" ]; then
-    _PERSEUS_START_DIR=$(pwd)
+if [ -n "${_PERSEUS_MODULE_PATH}" ] && [ "${_PERSEUS_MODULE_PATH}" != "${PWD}" ]; then
+    _PERSEUS_START_DIR=${PWD}
     cd ${_PERSEUS_MODULE_PATH}
 else 
-    _PERSEUS_MODULE_PATH=$(pwd)
+    _PERSEUS_MODULE_PATH=${PWD}
 fi
 # grab initial branch so that we can switch back when we're done
 _PERSEUS_INITIAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
