@@ -36,7 +36,7 @@ func CreateServerCommand(logFn LogFunc) *cobra.Command {
 	}
 	fset := cmd.Flags()
 	fset.String("listen-addr", ":31138", "the TCP address to listen on")
-	fset.String("db-addr", "localhost:5432", "the TCP host and port of the Perseus DB")
+	fset.String("db-addr", "", "the TCP host and port of the Perseus DB")
 	fset.String("db-user", "", "the login to be used when connecting to the Perseus DB")
 	fset.String("db-pass", "", "the password to be used when connecting to the Perseus DB")
 	return &cmd
@@ -56,14 +56,15 @@ func runServerCmd(cmd *cobra.Command, _ []string) error {
 func runServer(opts ...serverOption) error {
 	// set a default login/password for local dev in Docker.  prod deployment should always override
 	// these.
-	conf := serverConfig{
-		dbUser: "postgres",
-		dbPwd:  "postgres",
-	}
+	var conf serverConfig
 	for _, fn := range opts {
 		if err := fn(&conf); err != nil {
 			return fmt.Errorf("could not apply service config option: %w", err)
 		}
+	}
+
+	if conf.dbAddr == "" || conf.dbUser == "" || conf.dbPwd == "" {
+		return fmt.Errorf("the host, user name, and password for the Perseus database must be specified")
 	}
 
 	debugLog("starting the server")

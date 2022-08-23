@@ -6,12 +6,15 @@ import (
 	"io"
 	"os"
 	"path"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/semver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/CrowdStrike/perseus/internal/git"
 	"github.com/CrowdStrike/perseus/perseusapi"
@@ -31,7 +34,7 @@ func createUpdateCommand() *cobra.Command {
 	}
 	fset := cmd.Flags()
 	fset.VarP(&moduleVersion, "version", "v", "specifies the version of the Go module to be processed.")
-	fset.String("server-addr", "localhost:31138", "the TCP host and port of the Perseus server")
+	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
 
 	return &cmd
 }
@@ -46,6 +49,10 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 		if err := fn(&conf); err != nil {
 			return fmt.Errorf("could not apply client config option: %w", err)
 		}
+	}
+
+	if conf.serverAddr == "" {
+		return fmt.Errorf("the Perseus server address must be specified")
 	}
 
 	if len(args) != 1 {
@@ -70,7 +77,7 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("No semver tags exist at the current commit. Please specify a version explicitly.")
 		default:
 			//nolint: stylecheck // we want capitals and punctuation b/c these errors are shown to the user
-			return fmt.Errorf("Multiple semver tags exist at the current commit. Please specify a version explicitly.")
+			return fmt.Errorf("Multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
 		}
 	}
 	info, err := parseModule(moduleDir)
@@ -97,10 +104,27 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func applyUpdates(conf clientConfig, mod module, deps []module) error {
-	// TODO: implement TLS
+func applyUpdates(conf clientConfig, mod module, deps []module) (err error) {
+	defer func() {
+		switch err {
+		case context.DeadlineExceeded:
+			err = fmt.Errorf("timed out trying to connect to the Perseus server")
+		default:
+			if err != nil {
+				sc := status.Code(err)
+				switch sc {
+				case codes.Unavailable:
+					err = fmt.Errorf("unable to connect to the Perseus server")
+				default:
+				}
+			}
+		}
+	}()
+
 	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+		grpc.WithTimeout(300 * time.Millisecond),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO: support TLS
 	}
 	debugLog("connecting to Perseus server at %s", conf.serverAddr)
 	conn, err := grpc.Dial(conf.serverAddr, dialOpts...)
