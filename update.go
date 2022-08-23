@@ -123,18 +123,19 @@ func applyUpdates(conf clientConfig, mod module, deps []module) (err error) {
 
 	dialOpts := []grpc.DialOption{
 		grpc.WithBlock(),
-		grpc.WithTimeout(300 * time.Millisecond),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO: support TLS
 	}
 	debugLog("connecting to Perseus server at %s", conf.serverAddr)
-	conn, err := grpc.Dial(conf.serverAddr, dialOpts...)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, conf.serverAddr, dialOpts...)
 	if err != nil {
 		return err
 	}
 
 	client := perseusapi.NewPerseusServiceClient(conn)
 
-	ctx := context.Background()
+	ctx = context.Background()
 	req := perseusapi.UpdateDependenciesRequest{
 		ModuleName: mod.Name,
 		Version:    mod.Version,
