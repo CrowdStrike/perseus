@@ -24,11 +24,11 @@ type grpcServer struct {
 }
 
 var (
-	reMatchModuleMajorVersion = regexp.MustCompile(`.+/v([2-9][0-9]*)$`)
+	reMatchModuleMajorVersion = regexp.MustCompile(`.+/v([2-9]|[1-9][0-9]+)$`)
 )
 
-// NewGRPCServer constructs and returns a new gRPC server instance
-func NewGRPCServer(store store.Store) perseusapi.PerseusServiceServer {
+// newGRPCServer constructs and returns a new gRPC server instance
+func newGRPCServer(store store.Store) perseusapi.PerseusServiceServer {
 	s := grpcServer{
 		store: store,
 	}
@@ -62,18 +62,10 @@ func (s *grpcServer) CreateModule(ctx context.Context, req *perseusapi.CreateMod
 		}
 	}
 
-	// TODO: move this into the store implementation so that it can be transactional without leaking
-	// database stuff here
-	moduleID, err := s.store.SaveModule(ctx, m.GetName(), "")
+	err := s.store.SaveModule(ctx, m.GetName(), "", m.GetVersions()...)
 	if err != nil {
 		log.Printf("save module error: %v\n", err)
 		return nil, status.Errorf(codes.Internal, fmt.Sprintf("unable to save module %q: a database operation failed", m.GetName()))
-	}
-	if len(m.Versions) > 0 {
-		if err = s.store.SaveModuleVersions(ctx, moduleID, m.Versions...); err != nil {
-			log.Printf("save module error: %v\n", err)
-			return nil, status.Errorf(codes.Internal, fmt.Sprintf("unable to save module %q: a database operation failed", m.GetName()))
-		}
 	}
 
 	resp := perseusapi.CreateModuleResponse{

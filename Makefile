@@ -34,7 +34,11 @@ ensure-local-bin-dir:
 
 .PHONY: bin
 bin: ensure-local-bin-dir
-	@go build -o ${PROJECT_BASE_DIR}/bin/perseus .
+	@go build -o ${PROJECT_BASE_DIR}/bin/perseus -ldflags='-X main.BuildDate=$(shell date -u +'%FT%R:%S') -X main.BuildVersion=v0.0.0-localdev.$(shell whoami).$(shell date -u +'%Y%m%d%H%M%S')' .
+
+.PHONY: install
+install:
+	@go install -ldflags='-X main.BuildDate=$(shell date -u +'%FT%R:%S') -X main.BuildVersion=v0.0.0-localdev.$(shell whoami).$(shell date -u +'%Y%m%d%H%M%S')' .
 
 .PHONY: lint
 lint: lint-protos lint-go

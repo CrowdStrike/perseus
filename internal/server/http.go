@@ -17,8 +17,8 @@ import (
 //go:embed web
 var webContent embed.FS
 
-// HandleGrpcGateway registers the REST->gRPC gateway handler
-func HandleGrpcGateway(ctx context.Context, grpcAddr string) *gwruntime.ServeMux {
+// handleGrpcGateway registers the REST->gRPC gateway handler
+func handleGrpcGateway(ctx context.Context, grpcAddr string) *gwruntime.ServeMux {
 	mux := gwruntime.NewServeMux()
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -30,8 +30,8 @@ func HandleGrpcGateway(ctx context.Context, grpcAddr string) *gwruntime.ServeMux
 	return mux
 }
 
-// HandleUX serves the web UI for the service
-func HandleUX(ctx context.Context) http.Handler {
+// handleUX serves the web UI for the service
+func handleUX() http.Handler {
 	content, err := fs.Sub(webContent, "web")
 	if err != nil {
 		// panic so we don't clutter the code with handling unrecoverable errors
