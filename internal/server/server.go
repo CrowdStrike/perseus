@@ -19,10 +19,14 @@ import (
 	"github.com/CrowdStrike/perseus/perseusapi"
 )
 
+// LogFunc defines a callback function for logging.  This type is defined here so that the server
+// implementation is not tied to any specified logging library
 type LogFunc func(string, ...any)
 
+// debugLog is the logging function for the server.
 var debugLog LogFunc = func(string, ...any) { /* no-op by default */ }
 
+// CreateServerCommand initializes and returns a *cobra.Command that implements the 'server' CLI sub-command
 func CreateServerCommand(logFn LogFunc) *cobra.Command {
 	if logFn != nil {
 		debugLog = logFn
@@ -42,6 +46,7 @@ func CreateServerCommand(logFn LogFunc) *cobra.Command {
 	return &cmd
 }
 
+// runServerCmd implements the logic for the 'server' CLI sub-command
 func runServerCmd(cmd *cobra.Command, _ []string) error {
 	var opts []serverOption
 	opts = append(opts, readServerConfigEnv()...)
@@ -53,16 +58,15 @@ func runServerCmd(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// runServer starts the server with the specified runtime options.
 func runServer(opts ...serverOption) error {
-	// set a default login/password for local dev in Docker.  prod deployment should always override
-	// these.
+	// apply and validate runtime options
 	var conf serverConfig
 	for _, fn := range opts {
 		if err := fn(&conf); err != nil {
 			return fmt.Errorf("could not apply service config option: %w", err)
 		}
 	}
-
 	if conf.dbAddr == "" || conf.dbUser == "" || conf.dbPwd == "" {
 		return fmt.Errorf("the host, user name, and password for the Perseus database must be specified")
 	}
@@ -74,26 +78,30 @@ func runServer(opts ...serverOption) error {
 		return fmt.Errorf("could not create TCP listener: %w", err)
 	}
 	defer func() {
-		_ = lis.Close()
+		if err := lis.Close(); err != nil {
+			debugLog("unexpected error closing TCP listener: %v", err)
+		}
 	}()
 
+	// create a muxer and configure gRPC and HTTP routes
 	mux := cmux.New(lis)
-
-	// route gRPC connections
 	grpcLis := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
 	defer func() {
-		_ = grpcLis.Close()
+		if err := grpcLis.Close(); err != nil {
+			debugLog("unexpected error closing gRPC mux listener: %v", err)
+		}
 	}()
-
-	// route HTTP connections
 	httpLis := mux.Match(cmux.HTTP1Fast(http.MethodPatch))
 	defer func() {
-		_ = httpLis.Close()
+		if err := httpLis.Close(); err != nil {
+			debugLog("unexpected error closing HTTP mux listener: %v", err)
+		}
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// connect to the database
 	connStr := fmt.Sprintf("postgres://%s:%s@%s/perseus", conf.dbUser, conf.dbPwd, conf.dbAddr)
 	db, err := store.NewPostgresClient(ctx, connStr)
 	if err != nil {
@@ -101,23 +109,21 @@ func runServer(opts ...serverOption) error {
 	}
 	debugLog("connected to the database at %s", connStr)
 
+	// spin up gRPC and HTTP servers
 	grpcSrv := grpc.NewServer()
 	// TODO: apply interceptors, etc.
 	apiSrv := newGRPCServer(db)
 	perseusapi.RegisterPerseusServiceServer(grpcSrv, apiSrv)
-
 	httpSrv := newHTTPServer(ctx, conf.listenAddr)
 
+	// start services
+	// . use x/sync/errgroup so we can stop everything at once via the context
 	eg, ctx := errgroup.WithContext(ctx)
-
-	// start gRPC server
 	eg.Go(func() error {
 		debugLog("serving gRPC")
 		defer debugLog("gRPC server closed")
 		return grpcSrv.Serve(grpcLis)
 	})
-
-	// start HTTP server
 	eg.Go(func() error {
 		debugLog("serving HTTP/REST")
 		defer debugLog("HTTP/REST server closed")
@@ -162,6 +168,8 @@ func runServer(opts ...serverOption) error {
 	return nil
 }
 
+// newHTTPServer initializes and configures a new http.ServerMux that serves the gRPC Gateway REST
+// API and the UI
 func newHTTPServer(ctx context.Context, grpcAddr string) http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", handleGrpcGateway(ctx, grpcAddr))

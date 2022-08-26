@@ -24,6 +24,7 @@ var (
 	moduleVersion versionArg
 )
 
+// createUpdateCommand initializes and returns a *cobra.Command that implements the 'update' CLI sub-command
 func createUpdateCommand() *cobra.Command {
 	cmd := cobra.Command{
 		Use:          "update path/to/go/module",
@@ -39,27 +40,31 @@ func createUpdateCommand() *cobra.Command {
 	return &cmd
 }
 
+// runUpdateCmd implements the 'update' CLI sub-command.
 func runUpdateCmd(cmd *cobra.Command, args []string) error {
-	var opts []clientOption
+	// parse parameters and setup options
+	var (
+		opts []clientOption
+		conf clientConfig
+	)
 	opts = append(opts, readClientConfigEnv()...)
 	opts = append(opts, readClientConfigFlags(cmd.Flags())...)
-
-	var conf clientConfig
 	for _, fn := range opts {
 		if err := fn(&conf); err != nil {
 			return fmt.Errorf("could not apply client config option: %w", err)
 		}
 	}
 
+	// validate config
 	if conf.serverAddr == "" {
 		return fmt.Errorf("the Perseus server address must be specified")
 	}
-
 	if len(args) != 1 {
 		return fmt.Errorf("the path to the module is required")
 	}
 	moduleDir := path.Clean(args[0])
 
+	// extract the module version from the repo if not specified
 	if moduleVersion == "" {
 		repo, err := git.Open(moduleDir)
 		if err != nil {
@@ -73,38 +78,38 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 		case 1:
 			moduleVersion = versionArg(tags[0])
 		case 0:
-			//nolint: stylecheck // we want capitals and punctuation b/c these errors are shown to the user
 			return fmt.Errorf("No semver tags exist at the current commit. Please specify a version explicitly.")
 		default:
-			//nolint: stylecheck // we want capitals and punctuation b/c these errors are shown to the user
 			return fmt.Errorf("Multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
 		}
 	}
+
+	// parse the module info
 	info, err := parseModule(moduleDir)
 	if err != nil {
 		return err
-	}
-	if debugMode {
-		fmt.Printf("Processing Go module %s@%s (path=%q)\n", info.Name, moduleVersion, moduleDir)
 	}
 	mod := module{
 		Name:    info.Name,
 		Version: string(moduleVersion),
 	}
 	if debugMode {
-		fmt.Println("Direct Dependencies:")
+		fmt.Printf("Processing Go module %s@%s (path=%q)\nDirect Dependencies", info.Name, moduleVersion, moduleDir)
 		for _, d := range info.Deps {
 			fmt.Printf("\t%s@%s\n", d.Name, d.Version)
 		}
 	}
+
+	// send updates to the Perseus server
 	if err := applyUpdates(conf, mod, info.Deps); err != nil {
-		//nolint: stylecheck // we want capitals and punctuation b/c these errors are shown to the user
 		return fmt.Errorf("Unable to update the Perseus graph: %w", err)
 	}
 	return nil
 }
 
+// applyUpdates calls the Perseus server to update the dependencies of the specified module
 func applyUpdates(conf clientConfig, mod module, deps []module) (err error) {
+	// translate RPC errors to human-friendly ones on return
 	defer func() {
 		switch err {
 		case context.DeadlineExceeded:
@@ -121,6 +126,7 @@ func applyUpdates(conf clientConfig, mod module, deps []module) (err error) {
 		}
 	}()
 
+	// setup gRPC connection options and connect
 	dialOpts := []grpc.DialOption{
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO: support TLS
@@ -133,9 +139,9 @@ func applyUpdates(conf clientConfig, mod module, deps []module) (err error) {
 		return err
 	}
 
-	client := perseusapi.NewPerseusServiceClient(conn)
-
+	// create the client and call the server
 	ctx = context.Background()
+	client := perseusapi.NewPerseusServiceClient(conn)
 	req := perseusapi.UpdateDependenciesRequest{
 		ModuleName: mod.Name,
 		Version:    mod.Version,
@@ -153,15 +159,24 @@ func applyUpdates(conf clientConfig, mod module, deps []module) (err error) {
 	return nil
 }
 
+// moduleInfo represents the relevant Go module metadata for this application.
+//
+// This struct does not contain a version because the Go module library (golang.org/x/mod/modfile)
+// does not return a version for the "main" module even if it is a library package.
+type moduleInfo struct {
+	// the module name, ex: github.com/CrowdStrike/perseus
+	Name string
+	// zero or more direct dependencies of the module
+	Deps []module
+}
+
+// module represents a specific released version of a Go module
 type module struct {
 	Name, Version string
 }
 
-type moduleInfo struct {
-	Name string
-	Deps []module
-}
-
+// parseModule reads the module info for a Go module at path p, which should be the path to a folder
+// containing a go.mod file.
 func parseModule(p string) (info moduleInfo, err error) {
 	nfo, err := os.Stat(p)
 	if err != nil {
@@ -192,12 +207,16 @@ func parseModule(p string) (info moduleInfo, err error) {
 	return info, nil
 }
 
+// versionArg represents a string CLI parameter that must be a valid semantic version string
 type versionArg string
 
+// String returns the argument value string
 func (v *versionArg) String() string {
 	return string(*v)
 }
 
+// Set assigns the argument value to s.  If s is not a valid semantic version string per Go modules
+// rules, this method returns an error
 func (v *versionArg) Set(s string) error {
 	if !semver.IsValid(s) {
 		return fmt.Errorf("%q is not a valid semantic version string", s)
@@ -206,10 +225,12 @@ func (v *versionArg) Set(s string) error {
 	return nil
 }
 
+// Type returns a string description of the argument type
 func (v *versionArg) Type() string {
 	return "[SemVer string]"
 }
 
+// Get returns the value of the argument
 func (v *versionArg) Get() any {
 	return *v
 }

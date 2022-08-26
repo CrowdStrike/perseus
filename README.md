@@ -36,7 +36,7 @@ doesn't include the **version(s)** of those dependents.
 
 ### Perseus To The Rescue
 
-#### The Database (5 minutes)
+#### The Database
 
 For simplicity, Perseus uses a PostgreSQL database rather than an actual graph database like Neo4J,
 Cayley, and the like.  After some initial investigation, we found that the relatively small number of
@@ -72,7 +72,7 @@ for the target, the most recent known version is used.
 
 Example query:
 
-    curl --request GET http://localhost/api/graph-query?module=github.com%2Fexample%2Ffoo%40v1.2.3&mode=descendant
+    curl --request GET http://localhost/api/v1/github.com%2Fexample%2Ffoo/versions/v1.2.3/deps&direction=descendants
 
 The format of the response is either:
 
@@ -83,6 +83,8 @@ The format of the response is either:
 #### Updating the Graph
 
 The `perseus` binary is both the server and a CLI tool for interacting with it.  When used as a CLI, `perseus update ...` extracts the direct dependencies of a specified Go module and updates the Perseus graph.  By scripting executions of `perseus update` across the codebase, including as a CI step when new module versions are released, the Perseus graph can be incrementally grown to include all of the information necessary to query both ancestors and descendants of any particular version of a module.
+
+<hr/>
 
 _Disclaimer: `perseus` is an open source project, not a CrowdStrike product. As such, it carries no
 formal support, expressed or implied.  The project is licensed under the MIT open source license._

@@ -43,8 +43,11 @@ The table below shows the most common targets:
 | Target       | Description                                                                          |
 | ------------ | ------------------------------------------------------------------------------------ |
 | `test`       | Runs all tests for the module                                                        |
+| `lint`       | Runs the `golangci-lint` linter against the project                                  |
 | `protos`     | Generates the Go code in the `perseusapi` sub-package by invoking the Buf CLI        |
 | `bin`        | Builds the `perseus` binary and writes the result to the project-level `bin/` folder |
+| `install`    | Builds the `perseus` binary and writes the Go install folder                         |
+| `snapshot`   | Invokes `goreleaser` to generate the configured artifacts                            |
 
 ### Prerequisites
 
@@ -89,3 +92,15 @@ While we feel like achieving and maintaining 100% code coverage is often an unte
 diminishing returns, any changes that reduce code coverage will receive pushback. We don't want
 people to spend days trying to bump coverage from 97% to 98%, often at the expense of code clarity,
 but that doesn't mean that we're okay with making things worse.
+
+## Creating a Local Database
+
+As mentioned above, we use Docker Compose to streamline the process of standing up a local database
+for testing.  There are only a few steps.
+
+0) Optionally, edit `docker-compose.yml` to specify a different default user and/or password for PostgreSQL
+1) Run `docker-compose up` from the root folder to create and start the PostreSQL container
+2) Using the tool of your choice, connect to the empty `perseus` database at `localhost:5432` and
+   run the creation script at `internal/store/create_database.sql`
+
+That's it. You now have a local Perseus database ready to populate with all of your Go module dependencies.

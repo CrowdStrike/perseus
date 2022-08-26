@@ -28,7 +28,7 @@ A `ModuleVersion` stores a specific, released version of a given `Module` identi
 ModuleVersion:
     ID       int, PK
     ModuleID int, required, FK(Module.ID)
-    Version   string
+    Version  string
 ```
 
 ### ModuleDependency
