@@ -13,7 +13,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/mod v0.1.1-0.20191105210325-c90efee705ee
 	google.golang.org/genproto v0.0.0-20220805133916-01dd62135a58
-	google.golang.org/grpc v1.48.0
+	google.golang.org/grpc v1.49.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.1
 )
