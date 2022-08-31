@@ -20,6 +20,62 @@
     "application/json"
   ],
   "paths": {
+    "/api/v1/module-versions": {
+      "get": {
+        "summary": "Lists versions of the specified module, either the latest or all",
+        "operationId": "PerseusService_ListModuleVersions",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/perseusapiListModuleVersionsResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "moduleName",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "versionOption",
+            "in": "query",
+            "required": false,
+            "type": "string",
+            "enum": [
+              "none",
+              "latest",
+              "all"
+            ],
+            "default": "none"
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "required": false,
+            "type": "integer",
+            "format": "int32"
+          }
+        ],
+        "tags": [
+          "PerseusService"
+        ]
+      }
+    },
     "/api/v1/modules": {
       "get": {
         "summary": "Lists known modules.",
@@ -96,62 +152,7 @@
         ]
       }
     },
-    "/api/v1/modules/{moduleName}/versions/{versionOption}": {
-      "get": {
-        "summary": "Lists versions of the specified module, either the latest or all",
-        "operationId": "PerseusService_ListModuleVersions",
-        "responses": {
-          "200": {
-            "description": "A successful response.",
-            "schema": {
-              "$ref": "#/definitions/perseusapiListModuleVersionsResponse"
-            }
-          },
-          "default": {
-            "description": "An unexpected error response.",
-            "schema": {
-              "$ref": "#/definitions/rpcStatus"
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "moduleName",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "versionOption",
-            "in": "path",
-            "required": true,
-            "type": "string",
-            "enum": [
-              "none",
-              "latest",
-              "all"
-            ]
-          },
-          {
-            "name": "pageToken",
-            "in": "query",
-            "required": false,
-            "type": "string"
-          },
-          {
-            "name": "pageSize",
-            "in": "query",
-            "required": false,
-            "type": "integer",
-            "format": "int32"
-          }
-        ],
-        "tags": [
-          "PerseusService"
-        ]
-      }
-    },
-    "/api/v1/modules/{moduleName}/versions/{version}/deps": {
+    "/api/v1/modules-dependencies": {
       "get": {
         "summary": "Queries direct dependencies of a specific version of a module.",
         "description": "The 'direction' indicate whether or not the returned list contains dependencies (things the\nspecified module depends on) or dependents (things that depend on the specified module).",
@@ -173,14 +174,14 @@
         "parameters": [
           {
             "name": "moduleName",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "type": "string"
           },
           {
             "name": "version",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "type": "string"
           },
           {
@@ -211,7 +212,9 @@
         "tags": [
           "PerseusService"
         ]
-      },
+      }
+    },
+    "/api/v1/update-module-dependencies": {
       "put": {
         "summary": "Adds or updates the direct dependencies of specific version of a module.",
         "description": "When invoking this API, the 'versions' attribute of each specified dependency must contain exactly 1 item",
@@ -232,18 +235,6 @@
         },
         "parameters": [
           {
-            "name": "moduleName",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
-            "name": "version",
-            "in": "path",
-            "required": true,
-            "type": "string"
-          },
-          {
             "name": "dependencies",
             "in": "body",
             "required": true,
@@ -253,6 +244,18 @@
                 "$ref": "#/definitions/perseusapiModule"
               }
             }
+          },
+          {
+            "name": "moduleName",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "tags": [
