@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 
 	sq "github.com/Masterminds/squirrel"
@@ -32,7 +31,8 @@ var (
 // PostgresClient performs store-related operations against a postgres backend
 // database.
 type PostgresClient struct {
-	db *sqlx.DB
+	db  *sqlx.DB
+	log func(string, ...any)
 }
 
 // ensure the PG client satisfies the Store interface
@@ -50,9 +50,18 @@ func NewPostgresClient(ctx context.Context, url string, opts ...PGOption) (*Post
 	if err != nil {
 		return nil, err
 	}
-	return &PostgresClient{
+	p := &PostgresClient{
 		db: db,
-	}, nil
+	}
+	for _, fn := range opts {
+		if err = fn(p); err != nil {
+			return nil, err
+		}
+	}
+	if p.log == nil {
+		p.log = func(string, ...any) {}
+	}
+	return p, nil
 }
 
 // SaveModule upserts module metadata. If there is an existing module with the provided name the
@@ -116,7 +125,7 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 	if err = writeModuleVersions(ctx, txn, pkey, mod.SemVer); err != nil {
 		return err
 	}
-	dependentID, err := getModuleVersionID(ctx, txn, mod.ModuleID, mod.SemVer)
+	dependentID, err := getModuleVersionID(ctx, txn, mod.ModuleID, mod.SemVer, p.log)
 	if err != nil {
 		return err
 	}
@@ -132,14 +141,14 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 		if err = writeModuleVersions(ctx, txn, pkey, d.SemVer); err != nil {
 			return err
 		}
-		dependeeID, err := getModuleVersionID(ctx, txn, d.ModuleID, d.SemVer)
+		dependeeID, err := getModuleVersionID(ctx, txn, d.ModuleID, d.SemVer, p.log)
 		if err != nil {
 			return err
 		}
 		cmd = cmd.Values(dependentID, dependeeID)
 	}
 	sql, args, err := cmd.Suffix("ON CONFLICT (dependent_id, dependee_id) DO NOTHING").ToSql()
-	log.Printf("upsert module dependencies: sql=%s args=%v err=%v\n", sql, args, err)
+	p.log("upsert module dependencies: sql=%s args=%v err=%v\n", sql, args, err)
 	if err != nil {
 		return fmt.Errorf("error constructing SQL query: %w", err)
 	}
@@ -242,18 +251,18 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string,
 // GetDependents retrieves all known module versions that depend on the given
 // module id and version pair.
 func (p *PostgresClient) GetDependents(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error) {
-	return getDependx(ctx, p.db, id, version, joinTargetDependents, pageToken, count)
+	return getDependx(ctx, p.db, id, version, joinTargetDependents, pageToken, count, p.log)
 }
 
 // GetDependees retrieves all known module versions that the given module id
 // and version pair depend on.
 func (p *PostgresClient) GetDependees(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error) {
-	return getDependx(ctx, p.db, id, version, joinTargetDependees, pageToken, count)
+	return getDependx(ctx, p.db, id, version, joinTargetDependees, pageToken, count, p.log)
 }
 
 // getModuleVersionID executes a database query to translate the specified module and version to the
 // corresponding PKEY in the module_version table, creating the module and/or version if necessary
-func getModuleVersionID(ctx context.Context, db database, mod, ver string) (int32, error) {
+func getModuleVersionID(ctx context.Context, db database, mod, ver string, log func(string, ...any)) (int32, error) {
 	q := psql.
 		Select("mv.id").
 		From("module_version mv").
@@ -261,7 +270,7 @@ func getModuleVersionID(ctx context.Context, db database, mod, ver string) (int3
 		Where(sq.Eq{"mv.version": ver}).
 		Where(sq.Eq{"m.name": mod})
 	sql, args, err := q.ToSql()
-	log.Printf("translate module name/version to ID: sql=%s args=%v err=%v\n", sql, args, err)
+	log("translate module name/version to ID: sql=%s args=%v err=%v\n", sql, args, err)
 	if err != nil {
 		return 0, fmt.Errorf("error constructing SQL query: %w", err)
 	}
@@ -272,7 +281,7 @@ func getModuleVersionID(ctx context.Context, db database, mod, ver string) (int3
 	}
 	defer func() {
 		if e := rows.Close(); e != nil {
-			log.Println("error closing sql.Rows:", e)
+			log("error closing sql.Rows:", e)
 		}
 	}()
 	var id int32
@@ -386,7 +395,7 @@ func writeModuleVersions(ctx context.Context, db database, moduleID int32, versi
 
 // getDependx is a shared query for dependency gathering in either direction,
 // dependent on the joinType.
-func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType string, pageToken string, count int) ([]Version, string, error) {
+func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType string, pageToken string, count int, log func(string, ...any)) ([]Version, string, error) {
 	pageTokenKey := "moduleversions:" + module + version + ":" + joinType
 	offset := 0
 	if pageToken != "" {
@@ -430,7 +439,7 @@ func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType stri
 	if err != nil {
 		return nil, "", err
 	}
-	log.Printf("getDependx():\n\tsql: %s\n\targs: %v\n", sql, args)
+	log("getDependx():\n\tsql: %s\n\targs: %v\n", sql, args)
 	var dependents []Version
 	err = db.SelectContext(ctx, &dependents, sql, args...)
 	if err != nil {

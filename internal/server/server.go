@@ -103,7 +103,7 @@ func runServer(opts ...serverOption) error {
 
 	// connect to the database
 	connStr := fmt.Sprintf("postgres://%s:%s@%s/perseus", conf.dbUser, conf.dbPwd, conf.dbAddr)
-	db, err := store.NewPostgresClient(ctx, connStr)
+	db, err := store.NewPostgresClient(ctx, connStr, store.WithLog(debugLog))
 	if err != nil {
 		return fmt.Errorf("could not connect to the database: %w", err)
 	}
