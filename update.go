@@ -6,22 +6,19 @@ import (
 	"io"
 	"os"
 	"path"
-	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 	"golang.org/x/mod/semver"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 
 	"github.com/CrowdStrike/perseus/internal/git"
 	"github.com/CrowdStrike/perseus/perseusapi"
 )
 
 var (
-	moduleVersion versionArg
+	moduleVersion     versionArg
+	includePrerelease bool
 )
 
 // createUpdateCommand initializes and returns a *cobra.Command that implements the 'update' CLI sub-command
@@ -36,6 +33,7 @@ func createUpdateCommand() *cobra.Command {
 	fset := cmd.Flags()
 	fset.VarP(&moduleVersion, "version", "v", "specifies the version of the Go module to be processed.")
 	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
+	fset.BoolVar(&includePrerelease, "prerelease", false, "if specified, include pre-release tags when processing the module")
 
 	return &cmd
 }
@@ -84,19 +82,24 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if !includePrerelease && semver.Prerelease(string(moduleVersion)) != "" {
+		fmt.Printf("skipping pre-release tag %s\n", moduleVersion)
+		return nil
+	}
+
 	// parse the module info
 	info, err := parseModule(moduleDir)
 	if err != nil {
 		return err
 	}
-	mod := module{
-		Name:    info.Name,
+	mod := module.Version{
+		Path:    info.Name,
 		Version: string(moduleVersion),
 	}
 	if debugMode {
 		fmt.Printf("Processing Go module %s@%s (path=%q)\nDirect Dependencies", info.Name, moduleVersion, moduleDir)
 		for _, d := range info.Deps {
-			fmt.Printf("\t%s@%s\n", d.Name, d.Version)
+			fmt.Printf("\t%s\n", d)
 		}
 	}
 
@@ -108,48 +111,21 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 }
 
 // applyUpdates calls the Perseus server to update the dependencies of the specified module
-func applyUpdates(conf clientConfig, mod module, deps []module) (err error) {
-	// translate RPC errors to human-friendly ones on return
-	defer func() {
-		switch err {
-		case context.DeadlineExceeded:
-			err = fmt.Errorf("timed out trying to connect to the Perseus server")
-		default:
-			if err != nil {
-				sc := status.Code(err)
-				switch sc {
-				case codes.Unavailable:
-					err = fmt.Errorf("unable to connect to the Perseus server")
-				default:
-				}
-			}
-		}
-	}()
-
-	// setup gRPC connection options and connect
-	dialOpts := []grpc.DialOption{
-		grpc.WithBlock(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO: support TLS
-	}
-	debugLog("connecting to Perseus server at %s", conf.serverAddr)
-	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
-	defer cancel()
-	conn, err := grpc.DialContext(ctx, conf.serverAddr, dialOpts...)
+func applyUpdates(conf clientConfig, mod module.Version, deps []module.Version) (err error) {
+	// create the client and call the server
+	ctx := context.Background()
+	client, err := conf.dialServer()
 	if err != nil {
 		return err
 	}
-
-	// create the client and call the server
-	ctx = context.Background()
-	client := perseusapi.NewPerseusServiceClient(conn)
 	req := perseusapi.UpdateDependenciesRequest{
-		ModuleName: mod.Name,
+		ModuleName: mod.Path,
 		Version:    mod.Version,
 	}
 	req.Dependencies = make([]*perseusapi.Module, len(deps))
 	for i, d := range deps {
 		req.Dependencies[i] = &perseusapi.Module{
-			Name:     d.Name,
+			Name:     d.Path,
 			Versions: []string{d.Version},
 		}
 	}
@@ -167,12 +143,7 @@ type moduleInfo struct {
 	// the module name, ex: github.com/CrowdStrike/perseus
 	Name string
 	// zero or more direct dependencies of the module
-	Deps []module
-}
-
-// module represents a specific released version of a Go module
-type module struct {
-	Name, Version string
+	Deps []module.Version
 }
 
 // parseModule reads the module info for a Go module at path p, which should be the path to a folder
@@ -202,7 +173,7 @@ func parseModule(p string) (info moduleInfo, err error) {
 		if req.Indirect {
 			continue
 		}
-		info.Deps = append(info.Deps, module{Name: req.Mod.Path, Version: req.Mod.Version})
+		info.Deps = append(info.Deps, module.Version{Path: req.Mod.Path, Version: req.Mod.Version})
 	}
 	return info, nil
 }

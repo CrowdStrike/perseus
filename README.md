@@ -41,8 +41,11 @@ doesn't include the **version(s)** of those dependents.
 For simplicity, Perseus uses a PostgreSQL database rather than an actual graph database like Neo4J,
 Cayley, and the like.  After some initial investigation, we found that the relatively small number of
 entries (compared to other graph datasets) didn't warrant a specialized graph database.  Additionally,
-our IT organization already has all of the necessary infrastructure in place to support PostgreSQL,
-both in-house and hosted in AWS.
+our IT organization already has all of the necessary infrastructure in place to support PostgreSQL.
+
+One potentially signficant caveat, however, is that Amazon RDS currently does not support the
+[`pg-semver`](https://github.com/theory/pg-semver) extension that we use for storing a module's semantic
+version.
 
 #### The Service
 
@@ -61,7 +64,7 @@ existing data for the submitted module is first removed.
 
 Example update:
 
-    curl --request POST http://localhost/api/v1/modules/github.com/example/foo@v1.2.3/versions/v1.2.3/deps
+    curl --request POST http://localhost/api/v1/update-module-dependencies?module_name=github.com/example/foo&version=v1.2.3
        --header 'Content-Type: application/json'
        --data-raw '{"dependencies":[{"name":"github.com/rs/zerolog","versions:["v1.27.0"]}, {"name":"golang.org/x/text","versions":["v0.0.0-...."]}'
 
@@ -72,7 +75,7 @@ for the target, the most recent known version is used.
 
 Example query:
 
-    curl --request GET http://localhost/api/v1/github.com%2Fexample%2Ffoo/versions/v1.2.3/deps&direction=descendants
+    curl --request GET http://localhost/api/v1/module-dependencies?module_name=github.com/example/foo&version=v1.2.3&direction=descendants
 
 The format of the response is either:
 
