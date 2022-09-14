@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -43,6 +44,7 @@ func CreateServerCommand(logFn LogFunc) *cobra.Command {
 	fset.String("db-addr", "", "the TCP host and port of the Perseus DB")
 	fset.String("db-user", "", "the login to be used when connecting to the Perseus DB")
 	fset.String("db-pass", "", "the password to be used when connecting to the Perseus DB")
+	fset.String("db-name", "perseus", "the name of the Perseus DB to connect to")
 	return &cmd
 }
 
@@ -102,7 +104,7 @@ func runServer(opts ...serverOption) error {
 	defer cancel()
 
 	// connect to the database
-	connStr := fmt.Sprintf("postgres://%s:%s@%s/perseus", conf.dbUser, conf.dbPwd, conf.dbAddr)
+	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s", url.PathEscape(conf.dbUser), url.PathEscape(conf.dbPwd), url.PathEscape(conf.dbAddr), url.PathEscape(conf.dbName))
 	db, err := store.NewPostgresClient(ctx, connStr, store.WithLog(debugLog))
 	if err != nil {
 		return fmt.Errorf("could not connect to the database: %w", err)
