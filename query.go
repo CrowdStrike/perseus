@@ -27,17 +27,19 @@ var (
 	maxDepth                                     int
 )
 
-const goTemplateArgUsage = `provides a Go text template to format the output. each result is an instance of the following struct:
+const goTemplateArgUsage = `provides a Go text template to format the output.
+Each result is an instance of the following struct:
 	type Item struct {
 		// the module name and version, ex: github.com/CrowdStrike/perseus and v0.11.38
-		Name, Version string
+		Path, Version string
 		// true if this module is a direct dependency of the "root" module, false if not
 		IsDirect bool
 		// the number of dependency links between this module and the "root" module
 		// - direct dependencies have a degree of 1, dependencies of direct dependencies
 		//   have a degree of 2, etc.
 		Degree int
-	}`
+	}
+The Name() method also returns a string containing "[Path]@[Version]".`
 
 func tty() bool {
 	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
@@ -105,7 +107,7 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("The specified module name %q is invalid: %w", rootMod, err)
 	}
 
-	formatAsJSON = formatAsJSON || !(formatAsList || formatAsDotGraph || formatTemplate == "")
+	formatAsJSON = formatAsJSON || !(formatAsList || formatAsDotGraph || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatAsDotGraph, formatTemplate != "") {
 		return fmt.Errorf("Only one of --json, --list, --dot, or --format may be specified")
 	}
@@ -363,9 +365,9 @@ func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, 
 
 // generateDotGraph constructs a DOT digraph for the specified dependency tree
 func generateDotGraph(_ context.Context, tree dependencyTreeNode, dir perseusapi.DependencyDirection) string {
-	rankDir := "RL"
+	rankDir, arrowDir := "RL", ""
 	if dir == perseusapi.DependencyDirection_dependencies {
-		rankDir = "LR"
+		rankDir, arrowDir = "LR", " [dir=back]"
 	}
 	var sb strings.Builder
 	sb.WriteString(`digraph G {
@@ -393,7 +395,7 @@ func generateDotGraph(_ context.Context, tree dependencyTreeNode, dir perseusapi
 			}
 			uniq[edgeKey] = struct{}{}
 
-			sb.WriteString(fmt.Sprintf("\t\t%q -> %q\n", dep.Module, node.Module))
+			sb.WriteString(fmt.Sprintf("\t\t%q -> %q%s\n", dep.Module, node.Module, arrowDir))
 			if len(dep.Deps) > 0 {
 				stack = append(stack, dep)
 			}
