@@ -55,11 +55,20 @@ func createQueryCommand() *cobra.Command {
 	}
 	fset := cmd.PersistentFlags()
 	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
-	fset.BoolVar(&formatAsJSON, "json", false, "specifies that the output should be formatted as nested JSON")
+	fset.BoolVar(&formatAsJSON, "json", false, "specifies that the output should be formatted as JSON")
 	fset.BoolVar(&formatAsList, "list", false, "specifies that the output should be formatted as a tabular list")
-	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph")
+	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph (not supported for list-modules)")
 	fset.StringVarP(&formatTemplate, "format", "f", "", goTemplateArgUsage)
-	fset.IntVar(&maxDepth, "max-depth", 1, "specifies the maximum number of levels to be returned")
+	fset.IntVar(&maxDepth, "max-depth", 4, "specifies the maximum number of levels to be returned")
+
+	listModulesCmd := cobra.Command{
+		Use:          "list-modules [pattern]",
+		Aliases:      []string{"lm"},
+		Short:        "Outputs a list of modules that match a provided glob pattern",
+		RunE:         runListModulesCmd,
+		SilenceUsage: true,
+	}
+	cmd.AddCommand(&listModulesCmd)
 
 	descendantsCmd := cobra.Command{
 		Use:          "descendants module[@version]",
@@ -82,7 +91,123 @@ func createQueryCommand() *cobra.Command {
 	return &cmd
 }
 
-// runQueryModuleGraphCmd implements the logic behind the 'query *' CLI sub-commands
+// runListModulesCmd implements the logic behind the 'query list-modules' CLI sub-commands
+func runListModulesCmd(cmd *cobra.Command, args []string) error {
+	conf, err := parseSharedQueryOpts(cmd, args)
+	if err != nil {
+		return err
+	}
+	if len(args) != 1 {
+		return fmt.Errorf("The module match pattern must be provided")
+	}
+
+	if formatAsDotGraph {
+		return fmt.Errorf("DOT graph output is not supported for this command")
+	}
+	formatAsJSON = formatAsJSON || !(formatAsList || formatTemplate != "")
+	if !xor(formatAsJSON, formatAsList, formatTemplate != "") {
+		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
+	}
+
+	var (
+		spinner       *yacspin.Spinner
+		updateSpinner = func(msg string) {
+			if spinner != nil {
+				spinner.Message(msg)
+			}
+		}
+	)
+	if tty() {
+		spinner, _ = yacspin.New(yacspin.Config{
+			CharSet:         yacspin.CharSets[11],
+			Frequency:       300 * time.Millisecond,
+			Message:         " ",
+			Prefix:          "querying the graph ",
+			Suffix:          " ",
+			SuffixAutoColon: false,
+		})
+		_ = spinner.Start()
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ps, err := conf.dialServer()
+	if err != nil {
+		return err
+	}
+
+	var results []dependencyItem
+	req := perseusapi.ListModulesRequest{
+		Filter: args[0],
+	}
+	for done := false; !done; {
+		updateSpinner("retrieving modules")
+		resp, err := ps.ListModules(ctx, &req)
+		if err != nil {
+			return fmt.Errorf("todo: %w", err)
+		}
+		for _, mod := range resp.Modules {
+			req2 := perseusapi.ListModuleVersionsRequest{
+				ModuleName:    mod.GetName(),
+				VersionOption: perseusapi.ModuleVersionOption_latest,
+			}
+			updateSpinner(fmt.Sprintf("determining latest version for %s", mod.GetName()))
+			resp2, err := ps.ListModuleVersions(ctx, &req2)
+			if err != nil {
+				return fmt.Errorf("todo: %w", err)
+			}
+			if len(resp2.Versions) == 0 {
+				return fmt.Errorf("Unable to determine the current version for %s", mod.GetName())
+			}
+
+			results = append(results, dependencyItem{
+				Path:    mod.GetName(),
+				Version: resp2.Versions[0],
+			})
+		}
+		req.PageToken = resp.GetNextPageToken()
+		done = (req.PageToken != "")
+	}
+
+	if spinner != nil {
+		_ = spinner.Stop()
+	}
+
+	switch {
+	case formatTemplate != "":
+		tt := template.New("item")
+		tt, err = tt.Parse(formatTemplate)
+		if err != nil {
+			return fmt.Errorf("Invalid Go text template specified: %w", err)
+		}
+		for _, e := range results {
+			if err := tt.Execute(os.Stdout, e); err != nil {
+				return fmt.Errorf("Error applying Go text template: %w", err)
+			}
+			os.Stdout.WriteString("\n")
+		}
+	case formatAsList:
+		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
+		defer func() { _ = tw.Flush() }()
+		if _, err := tw.Write([]byte("Module\tVersion\n")); err != nil {
+			return fmt.Errorf("Error writing tabular output: %w", err)
+		}
+		for _, e := range results {
+			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%s\n", e.Path, e.Version))); err != nil {
+				return fmt.Errorf("Error writing tabular output: %w", err)
+			}
+		}
+
+	default:
+		output, _ := json.Marshal(results)
+		os.Stdout.WriteString(string(output))
+		os.Stdout.WriteString("\n")
+	}
+
+	return nil
+}
+
+// runQueryModuleGraphCmd implements the logic behind the 'query ancestors' and 'query descendants' CLI sub-commands
 func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 	conf, err := parseSharedQueryOpts(cmd, args)
 	if err != nil {
@@ -187,6 +312,7 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		}
 		list := flattenTree(tree)
 		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
+		defer func() { _ = tw.Flush() }()
 		if _, err := tw.Write([]byte(col1Label + "\tDirect\n")); err != nil {
 			return fmt.Errorf("Error writing tabular output: %w", err)
 		}
@@ -195,7 +321,6 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("Error writing tabular output: %w", err)
 			}
 		}
-		tw.Flush()
 
 	case formatAsDotGraph:
 		g := generateDotGraph(ctx, tree, dir)
