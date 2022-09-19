@@ -64,7 +64,7 @@ func createQueryCommand() *cobra.Command {
 	listModulesCmd := cobra.Command{
 		Use:          "list-modules [pattern]",
 		Aliases:      []string{"lm"},
-		Short:        "Outputs a list of modules that match a provided glob pattern",
+		Short:        "Outputs the list of modules, along with the highest version, that match a provided glob pattern",
 		RunE:         runListModulesCmd,
 		SilenceUsage: true,
 	}
@@ -109,68 +109,20 @@ func runListModulesCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
 	}
 
-	var (
-		spinner       *yacspin.Spinner
-		updateSpinner = func(msg string) {
-			if spinner != nil {
-				spinner.Message(msg)
-			}
-		}
-	)
-	if tty() {
-		spinner, _ = yacspin.New(yacspin.Config{
-			CharSet:         yacspin.CharSets[11],
-			Frequency:       300 * time.Millisecond,
-			Message:         " ",
-			Prefix:          "querying the graph ",
-			Suffix:          " ",
-			SuffixAutoColon: false,
-		})
-		_ = spinner.Start()
-	}
+	updateSpinner, stopSpinner := startSpinner(" ")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	ps, err := conf.dialServer()
 	if err != nil {
+		stopSpinner()
 		return err
 	}
 
-	var results []dependencyItem
-	req := perseusapi.ListModulesRequest{
-		Filter: args[0],
-	}
-	for done := false; !done; {
-		updateSpinner("retrieving modules")
-		resp, err := ps.ListModules(ctx, &req)
-		if err != nil {
-			return fmt.Errorf("todo: %w", err)
-		}
-		for _, mod := range resp.Modules {
-			req2 := perseusapi.ListModuleVersionsRequest{
-				ModuleName:    mod.GetName(),
-				VersionOption: perseusapi.ModuleVersionOption_latest,
-			}
-			updateSpinner(fmt.Sprintf("determining latest version for %s", mod.GetName()))
-			resp2, err := ps.ListModuleVersions(ctx, &req2)
-			if err != nil {
-				return fmt.Errorf("todo: %w", err)
-			}
-			if len(resp2.Versions) == 0 {
-				return fmt.Errorf("Unable to determine the current version for %s", mod.GetName())
-			}
-
-			results = append(results, dependencyItem{
-				Path:    mod.GetName(),
-				Version: resp2.Versions[0],
-			})
-		}
-		req.PageToken = resp.GetNextPageToken()
-		done = (req.PageToken != "")
-	}
-
-	if spinner != nil {
-		_ = spinner.Stop()
+	results, err := listModules(ctx, ps, args[0], updateSpinner)
+	stopSpinner()
+	if err != nil {
+		return err
 	}
 
 	switch {
@@ -186,6 +138,7 @@ func runListModulesCmd(cmd *cobra.Command, args []string) error {
 			}
 			os.Stdout.WriteString("\n")
 		}
+
 	case formatAsList:
 		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
 		defer func() { _ = tw.Flush() }()
@@ -263,29 +216,8 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		dir = perseusapi.DependencyDirection_dependents
 	}
 
-	var (
-		spinner       *yacspin.Spinner
-		updateSpinner = func(msg string) {
-			if spinner != nil {
-				spinner.Message(msg)
-			}
-		}
-	)
-	if tty() {
-		spinner, _ = yacspin.New(yacspin.Config{
-			CharSet:         yacspin.CharSets[11],
-			Frequency:       300 * time.Millisecond,
-			Message:         " ",
-			Prefix:          "querying the graph ",
-			Suffix:          " ",
-			SuffixAutoColon: false,
-		})
-		_ = spinner.Start()
-	}
+	updateSpinner, stopSpinner := startSpinner(" ")
 	tree, err := walkDependencies(ctx, ps, rootMod, dir, 1, maxDepth, updateSpinner)
-	if spinner != nil {
-		_ = spinner.Stop()
-	}
 	if err != nil {
 		return err
 	}
@@ -295,9 +227,11 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		tt := template.New("item")
 		tt, err = tt.Parse(formatTemplate)
 		if err != nil {
+			stopSpinner()
 			return fmt.Errorf("Invalid Go text template specified: %w", err)
 		}
-		list := flattenTree(tree)
+		list := flattenTree(tree, updateSpinner)
+		stopSpinner()
 		for _, e := range list {
 			if err := tt.Execute(os.Stdout, e); err != nil {
 				return fmt.Errorf("Error applying Go text template: %w", err)
@@ -310,7 +244,8 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		if strings.HasPrefix(cmd.Use, "ancestors") {
 			col1Label = "Dependency"
 		}
-		list := flattenTree(tree)
+		list := flattenTree(tree, updateSpinner)
+		stopSpinner()
 		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
 		defer func() { _ = tw.Flush() }()
 		if _, err := tw.Write([]byte(col1Label + "\tDirect\n")); err != nil {
@@ -323,12 +258,16 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		}
 
 	case formatAsDotGraph:
+		updateSpinner("generating DOT graph")
 		g := generateDotGraph(ctx, tree, dir)
+		stopSpinner()
 		os.Stdout.Write([]byte(g))
 
 	default:
 		// default to JSON output if no other option was specified
+		updateSpinner("generating JSON")
 		formattedTree, _ := json.Marshal(tree)
+		stopSpinner()
 		os.Stdout.WriteString(string(formattedTree))
 		os.Stdout.WriteString("\n")
 	}
@@ -435,14 +374,51 @@ func walkDependencies(ctx context.Context, client perseusapi.PerseusServiceClien
 	return node, nil
 }
 
+// listModules invokes the Perseus API to retrieve a list of all modules that match the provided filter
+func listModules(ctx context.Context, ps perseusapi.PerseusServiceClient, filter string, status func(string)) (results []dependencyItem, err error) {
+	req := perseusapi.ListModulesRequest{
+		Filter: filter,
+	}
+	for done := false; !done; {
+		status("retrieving modules")
+		resp, err := ps.ListModules(ctx, &req)
+		if err != nil {
+			return nil, fmt.Errorf("todo: %w", err)
+		}
+		for _, mod := range resp.Modules {
+			req2 := perseusapi.ListModuleVersionsRequest{
+				ModuleName:    mod.GetName(),
+				VersionOption: perseusapi.ModuleVersionOption_latest,
+			}
+			status(fmt.Sprintf("determining latest version for %s", mod.GetName()))
+			resp2, err := ps.ListModuleVersions(ctx, &req2)
+			if err != nil {
+				return nil, fmt.Errorf("todo: %w", err)
+			}
+			if len(resp2.Versions) == 0 {
+				return nil, fmt.Errorf("Unable to determine the current version for %s", mod.GetName())
+			}
+
+			results = append(results, dependencyItem{
+				Path:    mod.GetName(),
+				Version: resp2.Versions[0],
+			})
+		}
+		req.PageToken = resp.GetNextPageToken()
+		done = (req.PageToken != "")
+	}
+	return results, nil
+}
+
 // flattenTree converts the nested tree of module dependencies into a flat list of unique modules
 // sorted by module name then by highest to lowest semantic version
-func flattenTree(tree dependencyTreeNode) []dependencyItem {
+func flattenTree(tree dependencyTreeNode, updateStatus func(string)) []dependencyItem {
 	var (
 		uniqueMods = make(map[string]struct{})
 		items      []dependencyItem
 	)
 	for _, dep := range tree.Deps {
+		updateStatus("processing " + dep.Module.String())
 		di := dependencyItem{
 			Path:     dep.Module.Path,
 			Version:  dep.Module.Version,
@@ -452,9 +428,10 @@ func flattenTree(tree dependencyTreeNode) []dependencyItem {
 		items = append(items, di)
 		uniqueMods[dep.Module.String()] = struct{}{}
 		if len(dep.Deps) > 0 {
-			items = append(items, processChildren(dep.Deps, uniqueMods, 2)...)
+			items = append(items, processChildren(dep.Deps, uniqueMods, 2, updateStatus)...)
 		}
 	}
+	updateStatus("sorting results")
 	sort.Slice(items, func(i, j int) bool {
 		lhs, rhs := items[i], items[j]
 		cmp := strings.Compare(lhs.Path, rhs.Path)
@@ -467,10 +444,11 @@ func flattenTree(tree dependencyTreeNode) []dependencyItem {
 }
 
 // processChildren flattens the dependency tree of deps into a list of unique modules
-func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, depth int) []dependencyItem {
+func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, depth int, updateStatus func(string)) []dependencyItem {
 	var items []dependencyItem
 	for _, d := range deps {
 		modName := d.Module.String()
+		updateStatus("processing " + modName)
 		if _, exists := uniqueMods[modName]; !exists {
 			di := dependencyItem{
 				Path:     d.Module.Path,
@@ -481,7 +459,7 @@ func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, 
 			items = append(items, di)
 			uniqueMods[modName] = struct{}{}
 			if len(d.Deps) > 0 {
-				items = append(items, processChildren(d.Deps, uniqueMods, depth+1)...)
+				items = append(items, processChildren(d.Deps, uniqueMods, depth+1, updateStatus)...)
 			}
 		}
 	}
@@ -564,4 +542,32 @@ func xor(vs ...bool) bool {
 		}
 	}
 	return n == 1
+}
+
+// startSpinner initializes and starts a "spinner" for the console and returns
+// a function for updating the spinner's message and another to stop it.
+func startSpinner(msg string) (update func(string), done func()) {
+	update = func(string) {}
+	done = func() {}
+
+	// no-op if we're not writing to a TTY
+	if tty() {
+		spinner, _ := yacspin.New(yacspin.Config{
+			CharSet:         yacspin.CharSets[11],
+			Frequency:       300 * time.Millisecond,
+			Message:         msg,
+			Prefix:          "querying the graph ",
+			Suffix:          " ",
+			SuffixAutoColon: false,
+		})
+		_ = spinner.Start()
+
+		update = func(msg string) {
+			spinner.Message(msg)
+		}
+		done = func() {
+			_ = spinner.Stop()
+		}
+	}
+	return update, done
 }
