@@ -60,6 +60,7 @@ async function loadPage() {
     window.location.href = `/ui/module.html?id=${module}&version=${version}&direction=${direction}`;
   };
 
+  document.getElementById("nodecount").innerHTML += `${nodes.length - 1} ${(direction == "dependencies")? "dependencies" : "dependents"}`
   RenderGraph(nodes, links, onClick);
 }
 

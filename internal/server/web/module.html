@@ -4,6 +4,9 @@
   <link rel="stylesheet" href="/ui/css/water.light.min.css" />
   <noscript>JavaScript is required</noscript>
   <style>
+    body {
+      max-width: 1210px;
+    }
     select {
       display: inline;
     }
@@ -21,7 +24,10 @@
     <select id="direction" name="direction"></select>
   </div>
 
-  <svg id="graph" width="960" height="600"></svg>
+  <div style="border:2px solid #EC3525; border-radius: 4px;">
+    <div style="margin: 4px 8px;"><span id="nodecount" style="font-style:italic"></span></div>
+    <svg id="graph" width="1200" height="900"></svg>
+  </div>
 
   <script src="https://d3js.org/d3.v4.min.js"></script>
   <script src="/ui/js/graph.js"></script>
