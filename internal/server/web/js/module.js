@@ -57,9 +57,10 @@ async function loadPage() {
   const { nodes, links } = await getModuleDeps(module, version, direction);
   const onClick = function (node) {
     const [module, version] = node.id.split("@");
-    window.location.href = `/ui/module.html?id=${module}&version=${version}`;
+    window.location.href = `/ui/module.html?id=${module}&version=${version}&direction=${direction}`;
   };
 
+  document.getElementById("nodecount").innerHTML += `${nodes.length - 1} ${(direction == "dependencies")? "dependencies" : "dependents"}`
   RenderGraph(nodes, links, onClick);
 }
 

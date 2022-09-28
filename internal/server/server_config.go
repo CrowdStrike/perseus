@@ -6,10 +6,12 @@ import (
 	"github.com/spf13/pflag"
 )
 
+const defaultDbName = "perseus"
+
 type serverConfig struct {
 	listenAddr string
 
-	dbAddr, dbUser, dbPwd string
+	dbAddr, dbUser, dbPwd, dbName string
 }
 
 type serverOption func(*serverConfig) error
@@ -42,6 +44,16 @@ func withDBPass(pass string) serverOption {
 	}
 }
 
+func withDBName(db string) serverOption {
+	return func(conf *serverConfig) error {
+		if db == "" {
+			db = defaultDbName
+		}
+		conf.dbName = db
+		return nil
+	}
+}
+
 func readServerConfigEnv() []serverOption {
 	var opts []serverOption
 
@@ -57,6 +69,9 @@ func readServerConfigEnv() []serverOption {
 	}
 	if pwd := os.Getenv("DB_PASS"); pwd != "" {
 		opts = append(opts, withDBPass(pwd))
+	}
+	if db := os.Getenv("DB_NAME"); db != "" {
+		opts = append(opts, withDBName(db))
 	}
 
 	return opts
@@ -78,6 +93,9 @@ func readServerConfigFlags(fset *pflag.FlagSet) []serverOption {
 	}
 	if pwd, err := fset.GetString("db-pass"); err == nil && pwd != "" {
 		opts = append(opts, withDBPass(pwd))
+	}
+	if db, err := fset.GetString("db-name"); err != nil && db != "" {
+		opts = append(opts, withDBName(db))
 	}
 
 	return opts

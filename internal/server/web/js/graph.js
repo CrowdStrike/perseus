@@ -9,7 +9,6 @@ const RenderGraph = function (nodes, links, onClickNode) {
     linkStrength = 1;
 
   const svg = d3.select("svg");
-  svg.attr("width", width).attr("height", height);
 
   function getNodeColor(node, neighbors) {
     return node.level === 0 ? "red" : "gray";

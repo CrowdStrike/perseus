@@ -27,17 +27,19 @@ var (
 	maxDepth                                     int
 )
 
-const goTemplateArgUsage = `provides a Go text template to format the output. each result is an instance of the following struct:
+const goTemplateArgUsage = `provides a Go text template to format the output.
+Each result is an instance of the following struct:
 	type Item struct {
 		// the module name and version, ex: github.com/CrowdStrike/perseus and v0.11.38
-		Name, Version string
+		Path, Version string
 		// true if this module is a direct dependency of the "root" module, false if not
 		IsDirect bool
 		// the number of dependency links between this module and the "root" module
 		// - direct dependencies have a degree of 1, dependencies of direct dependencies
 		//   have a degree of 2, etc.
 		Degree int
-	}`
+	}
+The Name() method also returns a string containing "[Path]@[Version]".`
 
 func tty() bool {
 	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
@@ -53,11 +55,20 @@ func createQueryCommand() *cobra.Command {
 	}
 	fset := cmd.PersistentFlags()
 	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
-	fset.BoolVar(&formatAsJSON, "json", false, "specifies that the output should be formatted as nested JSON")
+	fset.BoolVar(&formatAsJSON, "json", false, "specifies that the output should be formatted as JSON")
 	fset.BoolVar(&formatAsList, "list", false, "specifies that the output should be formatted as a tabular list")
-	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph")
+	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph (not supported for list-modules)")
 	fset.StringVarP(&formatTemplate, "format", "f", "", goTemplateArgUsage)
-	fset.IntVar(&maxDepth, "max-depth", 1, "specifies the maximum number of levels to be returned")
+	fset.IntVar(&maxDepth, "max-depth", 4, "specifies the maximum number of levels to be returned")
+
+	listModulesCmd := cobra.Command{
+		Use:          "list-modules [pattern]",
+		Aliases:      []string{"lm"},
+		Short:        "Outputs the list of modules, along with the highest version, that match a provided glob pattern",
+		RunE:         runListModulesCmd,
+		SilenceUsage: true,
+	}
+	cmd.AddCommand(&listModulesCmd)
 
 	descendantsCmd := cobra.Command{
 		Use:          "descendants module[@version]",
@@ -80,7 +91,76 @@ func createQueryCommand() *cobra.Command {
 	return &cmd
 }
 
-// runQueryModuleGraphCmd implements the logic behind the 'query *' CLI sub-commands
+// runListModulesCmd implements the logic behind the 'query list-modules' CLI sub-commands
+func runListModulesCmd(cmd *cobra.Command, args []string) error {
+	conf, err := parseSharedQueryOpts(cmd, args)
+	if err != nil {
+		return err
+	}
+	if len(args) != 1 {
+		return fmt.Errorf("The module match pattern must be provided")
+	}
+
+	if formatAsDotGraph {
+		return fmt.Errorf("DOT graph output is not supported for this command")
+	}
+	formatAsJSON = formatAsJSON || !(formatAsList || formatTemplate != "")
+	if !xor(formatAsJSON, formatAsList, formatTemplate != "") {
+		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
+	}
+
+	updateSpinner, stopSpinner := startSpinner(" ")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ps, err := conf.dialServer()
+	if err != nil {
+		stopSpinner()
+		return err
+	}
+
+	results, err := listModules(ctx, ps, args[0], updateSpinner)
+	stopSpinner()
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case formatTemplate != "":
+		tt := template.New("item")
+		tt, err = tt.Parse(formatTemplate)
+		if err != nil {
+			return fmt.Errorf("Invalid Go text template specified: %w", err)
+		}
+		for _, e := range results {
+			if err := tt.Execute(os.Stdout, e); err != nil {
+				return fmt.Errorf("Error applying Go text template: %w", err)
+			}
+			os.Stdout.WriteString("\n")
+		}
+
+	case formatAsList:
+		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
+		defer func() { _ = tw.Flush() }()
+		if _, err := tw.Write([]byte("Module\tVersion\n")); err != nil {
+			return fmt.Errorf("Error writing tabular output: %w", err)
+		}
+		for _, e := range results {
+			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%s\n", e.Path, e.Version))); err != nil {
+				return fmt.Errorf("Error writing tabular output: %w", err)
+			}
+		}
+
+	default:
+		output, _ := json.Marshal(results)
+		os.Stdout.WriteString(string(output))
+		os.Stdout.WriteString("\n")
+	}
+
+	return nil
+}
+
+// runQueryModuleGraphCmd implements the logic behind the 'query ancestors' and 'query descendants' CLI sub-commands
 func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 	conf, err := parseSharedQueryOpts(cmd, args)
 	if err != nil {
@@ -105,7 +185,7 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("The specified module name %q is invalid: %w", rootMod, err)
 	}
 
-	formatAsJSON = formatAsJSON || !(formatAsList || formatAsDotGraph || formatTemplate == "")
+	formatAsJSON = formatAsJSON || !(formatAsList || formatAsDotGraph || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatAsDotGraph, formatTemplate != "") {
 		return fmt.Errorf("Only one of --json, --list, --dot, or --format may be specified")
 	}
@@ -136,29 +216,8 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		dir = perseusapi.DependencyDirection_dependents
 	}
 
-	var (
-		spinner       *yacspin.Spinner
-		updateSpinner = func(msg string) {
-			if spinner != nil {
-				spinner.Message(msg)
-			}
-		}
-	)
-	if tty() {
-		spinner, _ = yacspin.New(yacspin.Config{
-			CharSet:         yacspin.CharSets[11],
-			Frequency:       300 * time.Millisecond,
-			Message:         " ",
-			Prefix:          "querying the graph ",
-			Suffix:          " ",
-			SuffixAutoColon: false,
-		})
-		_ = spinner.Start()
-	}
+	updateSpinner, stopSpinner := startSpinner(" ")
 	tree, err := walkDependencies(ctx, ps, rootMod, dir, 1, maxDepth, updateSpinner)
-	if spinner != nil {
-		_ = spinner.Stop()
-	}
 	if err != nil {
 		return err
 	}
@@ -168,9 +227,11 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		tt := template.New("item")
 		tt, err = tt.Parse(formatTemplate)
 		if err != nil {
+			stopSpinner()
 			return fmt.Errorf("Invalid Go text template specified: %w", err)
 		}
-		list := flattenTree(tree)
+		list := flattenTree(tree, updateSpinner)
+		stopSpinner()
 		for _, e := range list {
 			if err := tt.Execute(os.Stdout, e); err != nil {
 				return fmt.Errorf("Error applying Go text template: %w", err)
@@ -183,8 +244,10 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		if strings.HasPrefix(cmd.Use, "ancestors") {
 			col1Label = "Dependency"
 		}
-		list := flattenTree(tree)
+		list := flattenTree(tree, updateSpinner)
+		stopSpinner()
 		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
+		defer func() { _ = tw.Flush() }()
 		if _, err := tw.Write([]byte(col1Label + "\tDirect\n")); err != nil {
 			return fmt.Errorf("Error writing tabular output: %w", err)
 		}
@@ -193,15 +256,18 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("Error writing tabular output: %w", err)
 			}
 		}
-		tw.Flush()
 
 	case formatAsDotGraph:
+		updateSpinner("generating DOT graph")
 		g := generateDotGraph(ctx, tree, dir)
+		stopSpinner()
 		os.Stdout.Write([]byte(g))
 
 	default:
 		// default to JSON output if no other option was specified
+		updateSpinner("generating JSON")
 		formattedTree, _ := json.Marshal(tree)
+		stopSpinner()
 		os.Stdout.WriteString(string(formattedTree))
 		os.Stdout.WriteString("\n")
 	}
@@ -308,14 +374,51 @@ func walkDependencies(ctx context.Context, client perseusapi.PerseusServiceClien
 	return node, nil
 }
 
+// listModules invokes the Perseus API to retrieve a list of all modules that match the provided filter
+func listModules(ctx context.Context, ps perseusapi.PerseusServiceClient, filter string, status func(string)) (results []dependencyItem, err error) {
+	req := perseusapi.ListModulesRequest{
+		Filter: filter,
+	}
+	for done := false; !done; {
+		status("retrieving modules")
+		resp, err := ps.ListModules(ctx, &req)
+		if err != nil {
+			return nil, fmt.Errorf("todo: %w", err)
+		}
+		for _, mod := range resp.Modules {
+			req2 := perseusapi.ListModuleVersionsRequest{
+				ModuleName:    mod.GetName(),
+				VersionOption: perseusapi.ModuleVersionOption_latest,
+			}
+			status(fmt.Sprintf("determining latest version for %s", mod.GetName()))
+			resp2, err := ps.ListModuleVersions(ctx, &req2)
+			if err != nil {
+				return nil, fmt.Errorf("todo: %w", err)
+			}
+			if len(resp2.Versions) == 0 {
+				return nil, fmt.Errorf("Unable to determine the current version for %s", mod.GetName())
+			}
+
+			results = append(results, dependencyItem{
+				Path:    mod.GetName(),
+				Version: resp2.Versions[0],
+			})
+		}
+		req.PageToken = resp.GetNextPageToken()
+		done = (req.PageToken != "")
+	}
+	return results, nil
+}
+
 // flattenTree converts the nested tree of module dependencies into a flat list of unique modules
 // sorted by module name then by highest to lowest semantic version
-func flattenTree(tree dependencyTreeNode) []dependencyItem {
+func flattenTree(tree dependencyTreeNode, updateStatus func(string)) []dependencyItem {
 	var (
 		uniqueMods = make(map[string]struct{})
 		items      []dependencyItem
 	)
 	for _, dep := range tree.Deps {
+		updateStatus("processing " + dep.Module.String())
 		di := dependencyItem{
 			Path:     dep.Module.Path,
 			Version:  dep.Module.Version,
@@ -325,9 +428,10 @@ func flattenTree(tree dependencyTreeNode) []dependencyItem {
 		items = append(items, di)
 		uniqueMods[dep.Module.String()] = struct{}{}
 		if len(dep.Deps) > 0 {
-			items = append(items, processChildren(dep.Deps, uniqueMods, 2)...)
+			items = append(items, processChildren(dep.Deps, uniqueMods, 2, updateStatus)...)
 		}
 	}
+	updateStatus("sorting results")
 	sort.Slice(items, func(i, j int) bool {
 		lhs, rhs := items[i], items[j]
 		cmp := strings.Compare(lhs.Path, rhs.Path)
@@ -340,10 +444,11 @@ func flattenTree(tree dependencyTreeNode) []dependencyItem {
 }
 
 // processChildren flattens the dependency tree of deps into a list of unique modules
-func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, depth int) []dependencyItem {
+func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, depth int, updateStatus func(string)) []dependencyItem {
 	var items []dependencyItem
 	for _, d := range deps {
 		modName := d.Module.String()
+		updateStatus("processing " + modName)
 		if _, exists := uniqueMods[modName]; !exists {
 			di := dependencyItem{
 				Path:     d.Module.Path,
@@ -354,7 +459,7 @@ func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, 
 			items = append(items, di)
 			uniqueMods[modName] = struct{}{}
 			if len(d.Deps) > 0 {
-				items = append(items, processChildren(d.Deps, uniqueMods, depth+1)...)
+				items = append(items, processChildren(d.Deps, uniqueMods, depth+1, updateStatus)...)
 			}
 		}
 	}
@@ -363,9 +468,9 @@ func processChildren(deps []dependencyTreeNode, uniqueMods map[string]struct{}, 
 
 // generateDotGraph constructs a DOT digraph for the specified dependency tree
 func generateDotGraph(_ context.Context, tree dependencyTreeNode, dir perseusapi.DependencyDirection) string {
-	rankDir := "RL"
+	rankDir, arrowDir := "RL", ""
 	if dir == perseusapi.DependencyDirection_dependencies {
-		rankDir = "LR"
+		rankDir, arrowDir = "LR", " [dir=back]"
 	}
 	var sb strings.Builder
 	sb.WriteString(`digraph G {
@@ -393,7 +498,7 @@ func generateDotGraph(_ context.Context, tree dependencyTreeNode, dir perseusapi
 			}
 			uniq[edgeKey] = struct{}{}
 
-			sb.WriteString(fmt.Sprintf("\t\t%q -> %q\n", dep.Module, node.Module))
+			sb.WriteString(fmt.Sprintf("\t\t%q -> %q%s\n", dep.Module, node.Module, arrowDir))
 			if len(dep.Deps) > 0 {
 				stack = append(stack, dep)
 			}
@@ -437,4 +542,32 @@ func xor(vs ...bool) bool {
 		}
 	}
 	return n == 1
+}
+
+// startSpinner initializes and starts a "spinner" for the console and returns
+// a function for updating the spinner's message and another to stop it.
+func startSpinner(msg string) (update func(string), done func()) {
+	update = func(string) {}
+	done = func() {}
+
+	// no-op if we're not writing to a TTY
+	if tty() {
+		spinner, _ := yacspin.New(yacspin.Config{
+			CharSet:         yacspin.CharSets[11],
+			Frequency:       300 * time.Millisecond,
+			Message:         msg,
+			Prefix:          "querying the graph ",
+			Suffix:          " ",
+			SuffixAutoColon: false,
+		})
+		_ = spinner.Start()
+
+		update = func(msg string) {
+			spinner.Message(msg)
+		}
+		done = func() {
+			_ = spinner.Stop()
+		}
+	}
+	return update, done
 }
