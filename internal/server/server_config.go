@@ -6,6 +6,8 @@ import (
 	"github.com/spf13/pflag"
 )
 
+const defaultDbName = "perseus"
+
 type serverConfig struct {
 	listenAddr string
 
@@ -45,7 +47,7 @@ func withDBPass(pass string) serverOption {
 func withDBName(db string) serverOption {
 	return func(conf *serverConfig) error {
 		if db == "" {
-			db = "perseus"
+			db = defaultDbName
 		}
 		conf.dbName = db
 		return nil

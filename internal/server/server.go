@@ -44,7 +44,7 @@ func CreateServerCommand(logFn LogFunc) *cobra.Command {
 	fset.String("db-addr", "", "the TCP host and port of the Perseus DB")
 	fset.String("db-user", "", "the login to be used when connecting to the Perseus DB")
 	fset.String("db-pass", "", "the password to be used when connecting to the Perseus DB")
-	fset.String("db-name", "perseus", "the name of the Perseus DB to connect to")
+	fset.String("db-name", defaultDbName, "the name of the Perseus DB to connect to")
 	return &cmd
 }
 
