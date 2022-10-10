@@ -94,7 +94,7 @@ func readServerConfigFlags(fset *pflag.FlagSet) []serverOption {
 	if pwd, err := fset.GetString("db-pass"); err == nil && pwd != "" {
 		opts = append(opts, withDBPass(pwd))
 	}
-	if db, err := fset.GetString("db-name"); err != nil && db != "" {
+	if db, err := fset.GetString("db-name"); err == nil && db != "" {
 		opts = append(opts, withDBName(db))
 	}
 
