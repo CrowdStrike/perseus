@@ -34,5 +34,5 @@ echo "Processing module at ${_PERSEUS_MODULE_PATH}"
 for t in `git tag --list 'v*' --sort=-v:refname`; do
     echo "   analyzing ${t} ..."
     git checkout -q ${t}
-    perseus update ${_PERSEUS_MODULE_PATH} --version ${t}
+    perseus update --path ${_PERSEUS_MODULE_PATH} --version ${t}
 done

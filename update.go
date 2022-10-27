@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path"
 
@@ -13,6 +14,7 @@ import (
 	"golang.org/x/mod/semver"
 
 	"github.com/CrowdStrike/perseus/internal/git"
+	"github.com/CrowdStrike/perseus/internal/modproxy"
 	"github.com/CrowdStrike/perseus/perseusapi"
 )
 
@@ -21,12 +23,18 @@ var (
 	includePrerelease bool
 )
 
+const updateExampleUsage = `perseus update -p . --version v0.11.38
+perseus update --path $HOME/dev/go/foo --version v1.0.0
+perseus update -p $HOME/dev/go/bar
+perseus update --module golang.org/x/sys
+perseus update -m github.com/rs/zerolog -v v1.28.0`
+
 // createUpdateCommand initializes and returns a *cobra.Command that implements the 'update' CLI sub-command
 func createUpdateCommand() *cobra.Command {
 	cmd := cobra.Command{
-		Use:          "update path/to/go/module",
+		Use:          "update (-p|--path path/to/go/module/on/disk | -m|--module github.com/example/foo)",
 		Short:        "Processes a Go module and updates the Perseus graph with its direct dependencies",
-		Example:      "perseus update . --version 0.11.38\nperseus update $HOME/dev/go/foo --version 1.0.0\nperseus update $HOME/dev/go/bar",
+		Example:      updateExampleUsage,
 		RunE:         runUpdateCmd,
 		SilenceUsage: true,
 	}
@@ -34,6 +42,8 @@ func createUpdateCommand() *cobra.Command {
 	fset.VarP(&moduleVersion, "version", "v", "specifies the version of the Go module to be processed.")
 	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
 	fset.BoolVar(&includePrerelease, "prerelease", false, "if specified, include pre-release tags when processing the module")
+	fset.StringP("path", "p", "", "specifies the local path on disk to a Go module repository")
+	fset.StringP("module", "m", "", "specifies the module path of a public Go module")
 
 	return &cmd
 }
@@ -49,65 +59,128 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 	opts = append(opts, readClientConfigFlags(cmd.Flags())...)
 	for _, fn := range opts {
 		if err := fn(&conf); err != nil {
-			return fmt.Errorf("could not apply client config option: %w", err)
+			return fmt.Errorf("Could not apply client config option: %w", err)
 		}
 	}
 
 	// validate config
 	if conf.serverAddr == "" {
-		return fmt.Errorf("the Perseus server address must be specified")
+		return fmt.Errorf("The Perseus server address must be specified")
 	}
-	if len(args) != 1 {
-		return fmt.Errorf("the path to the module is required")
+	filePath, _ := cmd.Flags().GetString("path")
+	modPath, _ := cmd.Flags().GetString("module")
+	if filePath == "" && modPath == "" {
+		return fmt.Errorf("Either a local path (--path) or a module path (--module) must be specified")
 	}
-	moduleDir := path.Clean(args[0])
+	if !xor(filePath != "", modPath != "") {
+		return fmt.Errorf("Either a local path (--path) or a module path (--module) can be specified, but not both")
+	}
+
+	var (
+		info moduleInfo
+		err  error
+	)
+	switch {
+	case filePath != "":
+		// read module dependencies from source code on disk
+		info, err = getModuleInfoFromDir(filePath)
+	case modPath != "":
+		// read module dependencies from the module proxy
+		info, err = getModuleInfoFromProxy(modPath)
+	}
+	if err != nil {
+		return err
+	}
+
+	// send updates to the Perseus server
+	mod := module.Version{
+		Path:    info.Name,
+		Version: info.Version,
+	}
+	if err := applyUpdates(conf, mod, info.Deps); err != nil {
+		return fmt.Errorf("Unable to update the Perseus graph: %w", err)
+	}
+	return nil
+}
+
+// getModuleInfoFromDir extracts the current direct dependencies of a Go module by inspecting the source
+// code on disk at dir.
+func getModuleInfoFromDir(dir string) (moduleInfo, error) {
+	moduleDir := path.Clean(dir)
 
 	// extract the module version from the repo if not specified
 	if moduleVersion == "" {
 		repo, err := git.Open(moduleDir)
 		if err != nil {
-			return err
+			return moduleInfo{}, err
 		}
 		tags, err := repo.VersionTags()
 		if err != nil {
-			return nil
+			return moduleInfo{}, fmt.Errorf("unable to read version tags from the repo: %w", err)
 		}
 		switch len(tags) {
 		case 1:
 			moduleVersion = versionArg(tags[0])
 		case 0:
-			return fmt.Errorf("No semver tags exist at the current commit. Please specify a version explicitly.")
+			return moduleInfo{}, fmt.Errorf("No semver tags exist at the current commit. Please specify a version explicitly.")
 		default:
-			return fmt.Errorf("Multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
+			return moduleInfo{}, fmt.Errorf("Multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
 		}
 	}
 
 	if !includePrerelease && semver.Prerelease(string(moduleVersion)) != "" {
 		fmt.Printf("skipping pre-release tag %s\n", moduleVersion)
-		return nil
+		return moduleInfo{}, nil
 	}
 
 	// parse the module info
-	info, err := parseModule(moduleDir)
+	info, err := parseModuleDir(moduleDir)
+	info.Version = moduleVersion.String()
 	if err != nil {
-		return err
-	}
-	mod := module.Version{
-		Path:    info.Name,
-		Version: string(moduleVersion),
+		return moduleInfo{}, err
 	}
 	if debugMode {
-		fmt.Printf("Processing Go module %s@%s (path=%q)\nDirect Dependencies", info.Name, moduleVersion, moduleDir)
+		fmt.Printf("Processing Go module %s@%s (path=%q)...\nDirect Dependencies:\n", info.Name, moduleVersion, moduleDir)
 		for _, d := range info.Deps {
 			fmt.Printf("\t%s\n", d)
 		}
 	}
+	return info, nil
+}
 
-	// send updates to the Perseus server
-	if err := applyUpdates(conf, mod, info.Deps); err != nil {
-		return fmt.Errorf("Unable to update the Perseus graph: %w", err)
+// getModuleInfoFromProxy extracts the current direct dependencies of a Go module by querying the
+// system-configured Go module proxy/proxies.
+func getModuleInfoFromProxy(modulePath string) (moduleInfo, error) {
+	var (
+		v   string
+		err error
+	)
+	// get @latest from the proxy if no version was specified
+	v = moduleVersion.String()
+	if v == "" {
+		v, err = modproxy.GetCurrentVersion(http.DefaultClient, modulePath, includePrerelease)
+		if err != nil {
+			return moduleInfo{}, fmt.Errorf("unable to determine @latest for module %s: %w", modulePath, err)
+		}
 	}
-	return nil
+
+	if !includePrerelease && semver.Prerelease(v) != "" {
+		fmt.Printf("skipping pre-release tag %s\n", v)
+		return moduleInfo{}, nil
+	}
+
+	// parse the module info
+	info, err := parseModulePath(modulePath, v)
+	if err != nil {
+		return moduleInfo{}, err
+	}
+	if debugMode {
+		fmt.Printf("Processing Go module %s@%s...\nDirect Dependencies:\n", info.Name, info.Version)
+		for _, d := range info.Deps {
+			fmt.Printf("\t%s\n", d)
+		}
+	}
+	return info, nil
 }
 
 // applyUpdates calls the Perseus server to update the dependencies of the specified module
@@ -142,19 +215,33 @@ func applyUpdates(conf clientConfig, mod module.Version, deps []module.Version) 
 type moduleInfo struct {
 	// the module name, ex: github.com/CrowdStrike/perseus
 	Name string
+	// the module version, ex: v1.42.13
+	Version string
 	// zero or more direct dependencies of the module
 	Deps []module.Version
 }
 
-// parseModule reads the module info for a Go module at path p, which should be the path to a folder
+// fromModFile populates m from the provided modfile.File
+func (m *moduleInfo) fromModFile(mf *modfile.File, v string) {
+	m.Name = mf.Module.Mod.Path
+	m.Version = v
+	for _, req := range mf.Require {
+		if req.Indirect {
+			continue
+		}
+		m.Deps = append(m.Deps, module.Version{Path: req.Mod.Path, Version: req.Mod.Version})
+	}
+}
+
+// parseModuleDir reads the module info for a Go module at path p, which should be the path to a folder
 // containing a go.mod file.
-func parseModule(p string) (info moduleInfo, err error) {
+func parseModuleDir(p string) (info moduleInfo, err error) {
 	nfo, err := os.Stat(p)
 	if err != nil {
 		return info, fmt.Errorf("invalid module path: %w", err)
 	}
 	if !nfo.IsDir() {
-		return info, fmt.Errorf("invalid module path: %w", err)
+		return info, fmt.Errorf("invalid module path: must be a folder")
 	}
 
 	f, err := os.Open(path.Join(p, "go.mod"))
@@ -168,13 +255,23 @@ func parseModule(p string) (info moduleInfo, err error) {
 	if err != nil {
 		return info, fmt.Errorf("unable to parse go.mod: %w", err)
 	}
-	info.Name = mf.Module.Mod.Path
-	for _, req := range mf.Require {
-		if req.Indirect {
-			continue
-		}
-		info.Deps = append(info.Deps, module.Version{Path: req.Mod.Path, Version: req.Mod.Version})
+	info.fromModFile(mf, "")
+	return info, nil
+}
+
+// parseModulePath reads the module info for a Go module with path m and version v from the configured
+// module proxy/proxies.  If v is "" then this function returns the info for the latest version.
+func parseModulePath(m, v string) (info moduleInfo, err error) {
+	if v == "" {
+		return info, fmt.Errorf("module version must be specified")
 	}
+
+	var mf *modfile.File
+	mf, err = modproxy.GetModFile(http.DefaultClient, m, v)
+	if err != nil {
+		return info, err
+	}
+	info.fromModFile(mf, v)
 	return info, nil
 }
 
