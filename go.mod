@@ -10,7 +10,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mattn/go-isatty v0.0.16
 	github.com/soheilhy/cmux v0.1.5
-	github.com/spf13/cobra v1.6.0
+	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/theckman/yacspin v0.13.12
 	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4
