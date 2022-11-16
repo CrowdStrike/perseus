@@ -162,15 +162,21 @@ func GetModFile(g Getter, mod, version string) (*modfile.File, error) {
 // no proxy is set ($GOPROXY is unset or "") this function returns a single result containing the
 // Google public proxy.
 func getModProxies() []string {
+	// $GOPROXY is expected to be a string containing 0 or more URLs or the string "direct" separated
+	// by ',' or '|'
+	// - see https://go.dev/ref/mod#environment-variables
 	ev := os.Getenv("GOPROXY")
 	if ev == "" {
 		return []string{"https://proxy.golang.org"}
 	}
+	// convert '|' to ',' so we only need 1 call to strings.Split() below
+	ev = strings.ReplaceAll(ev, "|", ",")
 	var results []string
 	for _, s := range strings.Split(ev, ",") {
 		// not trying to deal with pulling go.mod directly from various VCSs for now
 		if s != "direct" {
-			results = append(results, s)
+			// remove any trailing slash so that the paths can be treated homogeneously
+			results = append(results, strings.TrimSuffix(s, "/"))
 		}
 	}
 	return results

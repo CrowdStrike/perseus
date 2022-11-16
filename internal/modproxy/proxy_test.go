@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -259,6 +260,75 @@ func TestDownloadModFile(t *testing.T) {
 				mod, _ = modfile.ParseLax("github.com/foo/bar@v0.0.0/go.mod", []byte(tc.expected), nil)
 			}
 			assert.Equal(t, mod, got, "go.mod contents must match")
+		})
+	}
+}
+
+func TestGetModProxies(t *testing.T) {
+	type testCase struct {
+		name     string
+		env      string
+		expected []string
+	}
+	cases := []testCase{
+		{
+			name: "no value",
+			env:  "",
+			expected: []string{
+				"https://proxy.golang.org",
+			},
+		},
+		{
+			name: "one proxy",
+			env:  "https://proxy.golang.org",
+			expected: []string{
+				"https://proxy.golang.org",
+			},
+		},
+		{
+			name: "one proxy with trailing slash",
+			env:  "https://proxy.golang.org/",
+			expected: []string{
+				"https://proxy.golang.org",
+			},
+		},
+		{
+			name: "one proxy plus direct",
+			env:  "https://proxy.golang.org,direct",
+			expected: []string{
+				"https://proxy.golang.org",
+			},
+		},
+		{
+			name: "two proxies",
+			env:  "https://altproxy.example.com,https://proxy.golang.org",
+			expected: []string{
+				"https://altproxy.example.com",
+				"https://proxy.golang.org",
+			},
+		},
+		{
+			name: "two proxies with pipe separator",
+			env:  "https://altproxy.example.com|https://proxy.golang.org",
+			expected: []string{
+				"https://altproxy.example.com",
+				"https://proxy.golang.org",
+			},
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// DEVNOTE: Dylan Bourque - 2022-11-16
+			// - this test is explicitly NOT parallel because the logic requires setting, reading, then
+			//   restoring the $GOPROXY environment variable for the process.
+			cur := os.Getenv("GOPROXY")
+			defer os.Setenv("GOPROXY", cur)
+
+			os.Setenv("GOPROXY", tc.env)
+
+			got := getModProxies()
+			assert.ElementsMatch(t, got, tc.expected)
 		})
 	}
 }
