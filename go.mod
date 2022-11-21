@@ -16,7 +16,7 @@ require (
 	github.com/theckman/yacspin v0.13.12
 	golang.org/x/mod v0.7.0
 	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c
-	google.golang.org/grpc v1.50.1
+	google.golang.org/grpc v1.51.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0
 	google.golang.org/protobuf v1.28.1
 )
