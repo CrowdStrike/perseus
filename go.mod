@@ -12,7 +12,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.8.0
+	github.com/stretchr/testify v1.8.1
 	github.com/theckman/yacspin v0.13.12
 	golang.org/x/mod v0.7.0
 	google.golang.org/genproto v0.0.0-20221027153422-115e99e71e1c
