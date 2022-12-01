@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	rootCommand.PersistentFlags().BoolVarP(&debugMode, "debug", "x", false, "enable verbose logging")
+	rootCommand.PersistentFlags().BoolVarP(&debugMode, "debug", "x", os.Getenv("LOG_VERBOSITY") == "debug", "enable verbose logging")
 
 	rootCommand.AddCommand(server.CreateServerCommand(debugLog))
 	rootCommand.AddCommand(createUpdateCommand())

@@ -55,7 +55,7 @@ lint-protos: check-buf-install
 
 .PHONY: snapshot
 snapshot: check-goreleaser-install
-	@goreleaser release --snapshot --rm-dist
+	@goreleaser release --snapshot --rm-dist --skip-publish
 
 .PHONY: check-buf-install
 check-buf-install:
