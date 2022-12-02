@@ -21,5 +21,5 @@ func debugLog(format string, args ...any) {
 		logger = log.New(os.Stdout, "[PERSEUS] ", log.LstdFlags|log.LUTC|log.Llongfile)
 	})
 	// skip 2 stack frames so that the logs report the code that called into this function
-	logger.Output(2, fmt.Sprintf(format, args...))
+	_ = logger.Output(2, fmt.Sprintf(format, args...))
 }
