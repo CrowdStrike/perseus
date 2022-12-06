@@ -2,11 +2,15 @@ PROJECT_BASE_DIR := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 # prepend the project-local bin/ folder to $PATH so that we find build-time tools there
 PATH := ${PROJECT_BASE_DIR}/bin:${PATH}
 
-TEST_OPTS ?= -race -v
+TEST_RACE ?= -race
+TEST_OPTS ?=
 
 .PHONY: all
 all: protos bin
 	$(info TODO)
+
+.PHONY: check
+check: lint check-goreleaser-config test
 
 .PHONY: protos
 protos: install-tools check-buf-install
@@ -16,7 +20,7 @@ protos: install-tools check-buf-install
 
 .PHONY: test
 test:
-	@go test ${TEST_OPTS} ./...
+	@go test ${TEST_OPTS} ${TEST_RACE} ./...
 
 BUILD_TIME_TOOLS =\
 	github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway\
@@ -53,9 +57,14 @@ lint-protos: check-buf-install
 	$(info Linting Protobuf files ...)
 	@buf lint ./perseusapi
 
+.PHONY: check-goreleaser-config
+check-goreleaser-config:
+	$(info Validating goreleaser config ...)
+	@goreleaser check
+
 .PHONY: snapshot
 snapshot: check-goreleaser-install
-	@goreleaser release --snapshot --rm-dist
+	@goreleaser release --snapshot --rm-dist --skip-publish
 
 .PHONY: check-buf-install
 check-buf-install:

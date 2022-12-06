@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -17,7 +18,8 @@ func debugLog(format string, args ...any) {
 		return
 	}
 	initLogOnce.Do(func() {
-		logger = log.New(os.Stdout, "[PERSEUS] ", log.LstdFlags|log.LUTC)
+		logger = log.New(os.Stdout, "[PERSEUS] ", log.LstdFlags|log.LUTC|log.Llongfile)
 	})
-	logger.Printf(format, args...)
+	// skip 2 stack frames so that the logs report the code that called into this function
+	_ = logger.Output(2, fmt.Sprintf(format, args...))
 }

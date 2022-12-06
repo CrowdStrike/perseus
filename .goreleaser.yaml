@@ -32,6 +32,29 @@ archives:
     format_overrides:
       - goos: windows
         format: zip
+dockers:
+  - id: perseus-service
+    ids:
+      - perseus-cli
+    image_templates:
+      - "ghcr.io/crowdstrike/perseus:latest"
+      - "ghcr.io/crowdstrike/perseus:{{ .Version }}"
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile.service
+    build_flag_templates:
+      - '--pull'
+      - '--label=org.opencontainers.image.created={{ .Date }}'
+      - '--label=org.opencontainers.image.name={{ .ProjectName }}'
+      - '--label=org.opencontainers.image.revision={{ .FullCommit }}'
+      - '--label=org.opencontainers.image.version={{ .Version }}'
+      - '--label=org.openconatiners.image.licenses=MIT'
+      - '--label=org.opencontainers.image.source=https://github.com/CrowdStrike/perseus'
+      - >
+        --label=org.opencontainers.image.description=A Docker image to run a containerized Perseus server.
+        This image is built from a 'scratch' base image and runs "perseus server", exposing port 31138 from the container.
+        You must specify the following environment variables: DB_ADDR (the address of the Perseus database),
+        DB_USER (the login for the database) and DB_PASS (the login password for the database).
 checksum:
   name_template: 'checksums.txt'
 snapshot:

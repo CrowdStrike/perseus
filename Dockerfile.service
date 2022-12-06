@@ -1,0 +1,4 @@
+FROM scratch
+COPY perseus /
+EXPOSE 31138
+ENTRYPOINT ["/perseus", "server"]

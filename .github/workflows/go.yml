@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  perseus:
+  lint-test-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -23,14 +23,6 @@ jobs:
 
       - name: test
         run: go test -v -race ./...
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
 
-      - uses: actions/setup-go@v3
-        with:
-          go-version: 1.18
-
-      - name: perseus
+      - name: build
         run: go build .
