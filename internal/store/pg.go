@@ -205,7 +205,7 @@ func (p *PostgresClient) QueryModules(ctx context.Context, nameFilter string, pa
 // The pageToken argument, if provided, should be the return value from a prior call to this method
 // with the same filter.  It will be decoded to determine the next "page" of results.  An invalid page
 // token will result in an error being returned.
-func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string, pageToken string, count int) (results []Version, nextPageToken string, err error) {
+func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module, version string, pageToken string, count int) (results ModuleVersionQueryResult, nextPageToken string, err error) {
 	offset := 0
 	if pageToken != "" {
 		var err error
@@ -219,11 +219,22 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string,
 		return nil, "", fmt.Errorf("the module name must be specified")
 	}
 	q := psql.
-		Select("mv.id", "mv.module_id", "mv.version AS version").
+		Select("mv.id", "mv.module_id", "m.name", "mv.version AS version").
 		From(tableModuleVersions + " mv").
-		Join(tableModules + " m ON (m.id = mv.module_id)").
-		Where(sq.Eq{"m.name": module}).
-		OrderBy("mv.version DESC")
+		Join(tableModules + " m ON (m.id = mv.module_id)")
+	if strings.ContainsAny(module, "*?") {
+		q = q.Where(sq.Like{"m.name": globToLike(module)})
+	} else {
+		q = q.Where(sq.Eq{"m.name": module})
+	}
+	if version != "" {
+		if strings.ContainsAny(version, "*?") {
+			q = q.Where(sq.Like{"mv.version::text": globToLike(version)})
+		} else {
+			q = q.Where(sq.Eq{"mv.version": version})
+		}
+	}
+	q = q.OrderBy("m.name, mv.version DESC")
 	if offset > 0 {
 		q = q.Offset(uint64(offset))
 	}
@@ -240,13 +251,29 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string,
 		return nil, "", err
 	}
 
-	err = p.db.SelectContext(ctx, &results, sql, args...)
+	type queryResult struct {
+		ID       int32  `db:"id"`
+		ModuleID string `db:"module_id"`
+		Module   string `db:"name"`
+		SemVer   string `db:"version"`
+	}
+	var rows []queryResult
+	p.log("QueryModuleVersions:\nsql=%s\nargs=%v\n", sql, args)
+	err = p.db.SelectContext(ctx, &rows, sql, args...)
 	if err != nil {
 		return nil, "", err
 	}
 
+	results = make(ModuleVersionQueryResult)
+	for _, row := range rows {
+		results[row.Module] = append(results[row.Module], row.SemVer)
+	}
+
 	return results, encodePageToken("moduleversions:"+module, len(results), offset, count), nil
 }
+
+// ModuleVersionQueryResult is represents a set of modules each having a list of versions
+type ModuleVersionQueryResult map[string][]string
 
 // GetDependents retrieves all known module versions that depend on the given
 // module id and version pair.
@@ -309,19 +336,8 @@ func applyNameFilter(q sq.SelectBuilder, nameFilter string) sq.SelectBuilder {
 		return q
 	}
 	// translate glob ? and * wildcards to SQL equivalents
-	hasWildcards := false
-	where := strings.Map(func(c rune) rune {
-		switch c {
-		case '?':
-			hasWildcards = true
-			return '_'
-		case '*':
-			hasWildcards = true
-			return '%'
-		default:
-			return c
-		}
-	}, nameFilter)
+	hasWildcards := strings.ContainsAny(nameFilter, "*?")
+	where := globToLike(nameFilter)
 	// treat a filter with no wildards as a "contains" substring match
 	if !hasWildcards {
 		where = "%" + where + "%"
@@ -447,4 +463,24 @@ func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType stri
 	}
 
 	return dependents, encodePageToken(pageTokenKey, len(dependents), offset, count), nil
+}
+
+// globToLike converts a string containing a glob pattern to a SQL LIKE clause.
+func globToLike(glob string) string {
+	var res strings.Builder
+	for _, c := range glob {
+		switch c {
+		case '%', '_':
+			// need to escape LIKE pattern tokens
+			res.WriteRune('\\')
+			res.WriteRune(c)
+		case '*':
+			res.WriteRune('%')
+		case '?':
+			res.WriteRune('_')
+		default:
+			res.WriteRune(c)
+		}
+	}
+	return res.String()
 }

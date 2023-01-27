@@ -97,9 +97,12 @@ func (s *grpcServer) ListModules(ctx context.Context, req *perseusapi.ListModule
 func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.ListModuleVersionsRequest) (*perseusapi.ListModuleVersionsResponse, error) {
 	debugLog("ListModuleVersions() called")
 
-	mod, vopt, pageToken := req.GetModuleName(), req.GetVersionOption(), req.GetPageToken()
+	mod, vfilter, vopt, pageToken := req.GetModuleName(), req.GetVersionFilter(), req.GetVersionOption(), req.GetPageToken()
 	if mod == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "The module name must be specified")
+		mod = req.GetModuleFilter()
+		if mod == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "Either the module name or a module filter pattern must be specified")
+		}
 	}
 	switch vopt {
 	case perseusapi.ModuleVersionOption_none:
@@ -112,25 +115,30 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 		// all good
 	}
 
+	// TODO: apply version filter
+	_ = vfilter
+
 	var (
-		vers []store.Version
+		vers store.ModuleVersionQueryResult
 		err  error
 	)
-	vers, pageToken, err = s.store.QueryModuleVersions(ctx, req.GetModuleName(), req.GetPageToken(), int(req.GetPageSize()))
+	vers, pageToken, err = s.store.QueryModuleVersions(ctx, mod, vfilter, req.GetPageToken(), int(req.GetPageSize()))
 	if err != nil {
 		debugLog("query module versions error: %v\n", err)
 		return nil, status.Errorf(codes.Internal, "Unable to retrieve version list for module %s: a database operation failed", req.GetModuleName())
 	}
 
 	resp := perseusapi.ListModuleVersionsResponse{
-		ModuleName:    req.GetModuleName(),
 		NextPageToken: pageToken,
 	}
-	for _, v := range vers {
-		resp.Versions = append(resp.Versions, "v"+v.SemVer)
+	for k, v := range vers {
 		if req.GetVersionOption() == perseusapi.ModuleVersionOption_latest {
-			break
+			v = v[0:]
 		}
+		resp.Modules = append(resp.Modules, &perseusapi.Module{
+			Name:     k,
+			Versions: v,
+		})
 	}
 
 	return &resp, nil

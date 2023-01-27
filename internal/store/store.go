@@ -8,7 +8,7 @@ type Store interface {
 	SaveModuleDependencies(ctx context.Context, mod Version, deps ...Version) error
 
 	QueryModules(ctx context.Context, nameFilter string, pageToken string, count int) ([]Module, string, error)
-	QueryModuleVersions(ctx context.Context, module string, pageToken string, count int) (results []Version, nextPageToken string, err error)
+	QueryModuleVersions(ctx context.Context, module, version string, pageToken string, count int) (results ModuleVersionQueryResult, nextPageToken string, err error)
 
 	GetDependents(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error)
 	GetDependees(ctx context.Context, id, version string, pageToken string, count int) ([]Version, string, error)

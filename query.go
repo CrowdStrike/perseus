@@ -309,11 +309,11 @@ func lookupLatestModuleVersion(ctx context.Context, c perseusapi.PerseusServiceC
 	if err != nil {
 		return "", err
 	}
-	if len(resp.Versions) == 0 {
+	if len(resp.Modules) == 0 || len(resp.Modules[0].Versions) == 0 {
 		return "", fmt.Errorf("No version found for module %s", modulePath)
 	}
 
-	return resp.Versions[0], nil
+	return resp.Modules[0].Versions[0], nil
 }
 
 // dependencyTreeNode defines the information returned by walkDependencies
@@ -395,13 +395,13 @@ func listModules(ctx context.Context, ps perseusapi.PerseusServiceClient, filter
 			if err != nil {
 				return nil, fmt.Errorf("todo: %w", err)
 			}
-			if len(resp2.Versions) == 0 {
+			if len(resp2.Modules) == 0 || len(resp2.Modules[0].Versions) == 0 {
 				return nil, fmt.Errorf("Unable to determine the current version for %s", mod.GetName())
 			}
 
 			results = append(results, dependencyItem{
 				Path:    mod.GetName(),
-				Version: resp2.Versions[0],
+				Version: resp2.Modules[0].Versions[0],
 			})
 		}
 		req.PageToken = resp.GetNextPageToken()
