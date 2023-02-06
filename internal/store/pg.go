@@ -205,41 +205,53 @@ func (p *PostgresClient) QueryModules(ctx context.Context, nameFilter string, pa
 // The pageToken argument, if provided, should be the return value from a prior call to this method
 // with the same filter.  It will be decoded to determine the next "page" of results.  An invalid page
 // token will result in an error being returned.
-func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module, version string, pageToken string, count int) (results ModuleVersionQueryResult, nextPageToken string, err error) {
+func (p *PostgresClient) QueryModuleVersions(ctx context.Context, query ModuleVersionQuery) (results []ModuleVersionQueryResult, nextPageToken string, err error) {
 	offset := 0
-	if pageToken != "" {
+	if query.PageToken != "" {
 		var err error
-		offset, err = decodePageToken(pageToken, "moduleversions:"+module)
+		offset, err = decodePageToken(query.PageToken, query.pageTokenString())
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid page token: %w", err)
 		}
 	}
 
-	if module == "" {
+	if query.ModuleFilter == "" {
 		return nil, "", fmt.Errorf("the module name must be specified")
 	}
+	var columnList []string
+	if query.LatestOnly {
+		columnList = []string{"m.name", "MAX(mv.version) AS version"}
+	} else {
+		columnList = []string{"m.name", "mv.version AS version"}
+	}
 	q := psql.
-		Select("mv.id", "mv.module_id", "m.name", "mv.version AS version").
+		Select(columnList...).
 		From(tableModuleVersions + " mv").
 		Join(tableModules + " m ON (m.id = mv.module_id)")
-	if strings.ContainsAny(module, "*?") {
-		q = q.Where(sq.Like{"m.name": globToLike(module)})
+	if strings.ContainsAny(query.ModuleFilter, "*?") {
+		q = q.Where(sq.Like{"m.name": globToLike(query.ModuleFilter)})
 	} else {
-		q = q.Where(sq.Eq{"m.name": module})
+		q = q.Where(sq.Eq{"m.name": query.ModuleFilter})
 	}
-	if version != "" {
-		if strings.ContainsAny(version, "*?") {
-			q = q.Where(sq.Like{"mv.version::text": globToLike(version)})
+	if query.VersionFilter != "" {
+		if strings.ContainsAny(query.VersionFilter, "*?") {
+			q = q.Where(sq.Like{"mv.version::text": globToLike(query.VersionFilter)})
 		} else {
-			q = q.Where(sq.Eq{"mv.version": version})
+			q = q.Where(sq.Eq{"mv.version": query.VersionFilter})
 		}
 	}
-	q = q.OrderBy("m.name, mv.version DESC")
+	if !query.IncludePrerelease {
+		q = q.Where(sq.Eq{"get_semver_prerelease(mv.version)": ""})
+	}
+	if query.LatestOnly {
+		q = q.GroupBy("m.name")
+	}
+	q = q.OrderBy("1, 2 DESC")
 	if offset > 0 {
 		q = q.Offset(uint64(offset))
 	}
-	if count > 0 {
-		q = q.Limit(uint64(count))
+	if query.Count > 0 {
+		q = q.Limit(uint64(query.Count))
 	}
 
 	var (
@@ -264,16 +276,12 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module, versio
 		return nil, "", err
 	}
 
-	results = make(ModuleVersionQueryResult)
 	for _, row := range rows {
-		results[row.Module] = append(results[row.Module], row.SemVer)
+		results = append(results, ModuleVersionQueryResult{Module: row.Module, Version: row.SemVer})
 	}
 
-	return results, encodePageToken("moduleversions:"+module, len(results), offset, count), nil
+	return results, encodePageToken(query.pageTokenString(), len(results), offset, query.Count), nil
 }
-
-// ModuleVersionQueryResult is represents a set of modules each having a list of versions
-type ModuleVersionQueryResult map[string][]string
 
 // GetDependents retrieves all known module versions that depend on the given
 // module id and version pair.

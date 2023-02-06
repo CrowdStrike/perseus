@@ -61,6 +61,13 @@
             "type": "string"
           },
           {
+            "name": "includePrerelease",
+            "description": "indicates whether or not matching pre-release versions should be returned",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
             "name": "versionOption",
             "description": "indicates which matching version(s) should be returned",
             "in": "query",

@@ -95,7 +95,7 @@ func (s *grpcServer) ListModules(ctx context.Context, req *perseusapi.ListModule
 }
 
 func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.ListModuleVersionsRequest) (*perseusapi.ListModuleVersionsResponse, error) {
-	debugLog("ListModuleVersions() called")
+	debugLog("ListModuleVersions() called: req=%s", req)
 
 	mod, vfilter, vopt, pageToken := req.GetModuleName(), req.GetVersionFilter(), req.GetVersionOption(), req.GetPageToken()
 	if mod == "" {
@@ -115,14 +115,18 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 		// all good
 	}
 
-	// TODO: apply version filter
-	_ = vfilter
-
 	var (
-		vers store.ModuleVersionQueryResult
+		vers []store.ModuleVersionQueryResult
 		err  error
 	)
-	vers, pageToken, err = s.store.QueryModuleVersions(ctx, mod, vfilter, req.GetPageToken(), int(req.GetPageSize()))
+	vers, pageToken, err = s.store.QueryModuleVersions(ctx, store.ModuleVersionQuery{
+		ModuleFilter:      mod,
+		VersionFilter:     vfilter,
+		IncludePrerelease: req.IncludePrerelease,
+		LatestOnly:        req.VersionOption == perseusapi.ModuleVersionOption_latest,
+		PageToken:         req.GetPageToken(),
+		Count:             int(req.GetPageSize()),
+	})
 	if err != nil {
 		debugLog("query module versions error: %v\n", err)
 		return nil, status.Errorf(codes.Internal, "Unable to retrieve version list for module %s: a database operation failed", req.GetModuleName())
@@ -131,14 +135,17 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 	resp := perseusapi.ListModuleVersionsResponse{
 		NextPageToken: pageToken,
 	}
-	for k, v := range vers {
-		if req.GetVersionOption() == perseusapi.ModuleVersionOption_latest {
-			v = v[0:]
+	// external API is 1 result per module with a list of versions so group the data layer results
+	// to match that structure
+	var currMod *perseusapi.Module
+	for _, v := range vers {
+		if currMod == nil || currMod.Name != v.Module {
+			currMod = &perseusapi.Module{
+				Name: v.Module,
+			}
+			resp.Modules = append(resp.Modules, currMod)
 		}
-		resp.Modules = append(resp.Modules, &perseusapi.Module{
-			Name:     k,
-			Versions: v,
-		})
+		currMod.Versions = append(currMod.Versions, v.Version)
 	}
 
 	return &resp, nil

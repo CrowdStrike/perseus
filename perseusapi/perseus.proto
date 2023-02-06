@@ -118,6 +118,8 @@ message ListModuleVersionsRequest {
   string module_filter = 5;
   // glob pattern for the version(s) to return
   string version_filter = 6;
+  // indicates whether or not matching pre-release versions should be returned
+  bool include_prerelease = 7;
   // indicates which matching version(s) should be returned
   ModuleVersionOption version_option = 2;
 
