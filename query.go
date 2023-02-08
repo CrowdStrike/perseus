@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -27,7 +28,8 @@ var (
 	maxDepth                                     int
 )
 
-const goTemplateArgUsage = `provides a Go text template to format the output.
+const (
+	goTemplateArgUsage = `provides a Go text template to format the output.
 Each result is an instance of the following struct:
 	type Item struct {
 		// the module name and version, ex: github.com/CrowdStrike/perseus and v0.11.38
@@ -40,6 +42,15 @@ Each result is an instance of the following struct:
 		Degree int
 	}
 The Name() method also returns a string containing "[Path]@[Version]".`
+	listModuleVersionsExampleUsage = `  # list all known versions of Perseus
+  perseus query list-module-versions github.com/CrowdStrike/perseus
+
+  # list all versions of CrowdStrike GitHub modules, including pre-releases
+  perseus query lmv 'github.com/CrowdStrike/*' --include-prerelease
+
+  # list the highest v1.x version of all CrowdStrike GitHub modules
+  perseus q lmv 'github.com/CrowdStrike/*' -v 'v1.*' --latest`
+)
 
 func tty() bool {
 	return isatty.IsTerminal(os.Stdout.Fd()) || isatty.IsCygwinTerminal(os.Stdout.Fd())
@@ -57,7 +68,7 @@ func createQueryCommand() *cobra.Command {
 	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
 	fset.BoolVar(&formatAsJSON, "json", false, "specifies that the output should be formatted as JSON")
 	fset.BoolVar(&formatAsList, "list", false, "specifies that the output should be formatted as a tabular list")
-	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph (not supported for list-modules)")
+	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph (not supported for list-modules or list-module-versions)")
 	fset.StringVarP(&formatTemplate, "format", "f", "", goTemplateArgUsage)
 	fset.IntVar(&maxDepth, "max-depth", 4, "specifies the maximum number of levels to be returned")
 
@@ -69,6 +80,19 @@ func createQueryCommand() *cobra.Command {
 		SilenceUsage: true,
 	}
 	cmd.AddCommand(&listModulesCmd)
+
+	listVersionsCmd := cobra.Command{
+		Use:          "list-module-versions [--versions=(version glob)] (module glob)",
+		Example:      listModuleVersionsExampleUsage,
+		Aliases:      []string{"lmv"},
+		Short:        "Outputs a list of module versions that match the provided glob pattern(s)",
+		RunE:         runListModuleVersionsCmd,
+		SilenceUsage: true,
+	}
+	listVersionsCmd.Flags().StringP("versions", "v", "", "optional glob pattern specifying which module version(s) should be returned")
+	listVersionsCmd.Flags().Bool("latest", false, "specifies that only the latest/highest version matching the provided pattern should be returned")
+	listVersionsCmd.Flags().BoolP("include-prerelease", "p", false, "specifies that pre-release versions should be returned")
+	cmd.AddCommand(&listVersionsCmd)
 
 	descendantsCmd := cobra.Command{
 		Use:          "descendants module[@version]",
@@ -125,36 +149,69 @@ func runListModulesCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	switch {
-	case formatTemplate != "":
-		tt := template.New("item")
-		tt, err = tt.Parse(formatTemplate)
-		if err != nil {
-			return fmt.Errorf("Invalid Go text template specified: %w", err)
-		}
-		for _, e := range results {
-			if err := tt.Execute(os.Stdout, e); err != nil {
-				return fmt.Errorf("Error applying Go text template: %w", err)
-			}
-			os.Stdout.WriteString("\n")
-		}
+	if err = writeResults(os.Stdout, results); err != nil {
+		return err
+	}
+	return nil
+}
 
-	case formatAsList:
-		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
-		defer func() { _ = tw.Flush() }()
-		if _, err := tw.Write([]byte("Module\tVersion\n")); err != nil {
-			return fmt.Errorf("Error writing tabular output: %w", err)
-		}
-		for _, e := range results {
-			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%s\n", e.Path, e.Version))); err != nil {
-				return fmt.Errorf("Error writing tabular output: %w", err)
-			}
-		}
+func runListModuleVersionsCmd(cmd *cobra.Command, args []string) error {
+	conf, err := parseSharedQueryOpts(cmd, args)
+	if err != nil {
+		return err
+	}
+	if len(args) != 1 {
+		return fmt.Errorf("The module match pattern must be provided")
+	}
 
-	default:
-		output, _ := json.Marshal(results)
-		os.Stdout.WriteString(string(output))
-		os.Stdout.WriteString("\n")
+	if formatAsDotGraph {
+		return fmt.Errorf("DOT graph output is not supported for this command")
+	}
+	formatAsJSON = formatAsJSON || !(formatAsList || formatTemplate != "")
+	if !xor(formatAsJSON, formatAsList, formatTemplate != "") {
+		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
+	}
+
+	updateSpinner, stopSpinner := startSpinner(" ")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ps, err := conf.dialServer()
+	if err != nil {
+		stopSpinner()
+		return err
+	}
+
+	versionFilter, err := cmd.Flags().GetString("versions")
+	if err != nil {
+		debugLog("error reading 'version' CLI flag: %v", err)
+	}
+	latest, err := cmd.Flags().GetBool("latest")
+	if err != nil {
+		debugLog("error reading 'latest' CLI flag: %v", err)
+	}
+	includePrerelease, err := cmd.Flags().GetBool("include-prerelease")
+	if err != nil {
+		debugLog("error reading 'include-prerelease' CLI flag: %v", err)
+	}
+	results, err := listModuleVersions(ctx, ps, listModuleVersionsRequest{
+		modulePattern:     args[0],
+		versionPattern:    versionFilter,
+		latestOnly:        latest,
+		includePrerelease: includePrerelease,
+		updateStatus:      updateSpinner,
+	})
+	stopSpinner()
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		debugLog("found no versions matching %q for modules matching %q", versionFilter, args[0])
+		return nil
+	}
+
+	if err = writeResults(os.Stdout, results); err != nil {
+		return err
 	}
 
 	return nil
@@ -309,11 +366,11 @@ func lookupLatestModuleVersion(ctx context.Context, c perseusapi.PerseusServiceC
 	if err != nil {
 		return "", err
 	}
-	if len(resp.Versions) == 0 {
+	if len(resp.Modules) == 0 || len(resp.Modules[0].Versions) == 0 {
 		return "", fmt.Errorf("No version found for module %s", modulePath)
 	}
 
-	return resp.Versions[0], nil
+	return resp.Modules[0].Versions[0], nil
 }
 
 // dependencyTreeNode defines the information returned by walkDependencies
@@ -395,17 +452,64 @@ func listModules(ctx context.Context, ps perseusapi.PerseusServiceClient, filter
 			if err != nil {
 				return nil, fmt.Errorf("todo: %w", err)
 			}
-			if len(resp2.Versions) == 0 {
+
+			if len(resp2.Modules) == 0 || len(resp2.Modules[0].Versions) == 0 {
 				return nil, fmt.Errorf("Unable to determine the current version for %s", mod.GetName())
 			}
 
 			results = append(results, dependencyItem{
 				Path:    mod.GetName(),
-				Version: resp2.Versions[0],
+				Version: resp2.Modules[0].Versions[0],
 			})
 		}
 		req.PageToken = resp.GetNextPageToken()
 		done = (req.PageToken != "")
+	}
+	return results, nil
+}
+
+type listModuleVersionsRequest struct {
+	modulePattern     string
+	versionPattern    string
+	latestOnly        bool
+	includePrerelease bool
+	updateStatus      func(string)
+}
+
+// listModuleVersions invokes the Perseus API to retrieve a list of module versions that match the provided
+// filter options.
+func listModuleVersions(ctx context.Context, ps perseusapi.PerseusServiceClient, req listModuleVersionsRequest) (results []dependencyItem, err error) {
+	var pageToken string
+	for done := false; !done; {
+		req.updateStatus("retrieving module versions")
+		apiRequest := perseusapi.ListModuleVersionsRequest{
+			ModuleFilter:      req.modulePattern,
+			VersionFilter:     req.versionPattern,
+			IncludePrerelease: req.includePrerelease,
+			VersionOption:     perseusapi.ModuleVersionOption_all,
+			PageToken:         pageToken,
+		}
+		if req.latestOnly {
+			apiRequest.VersionOption = perseusapi.ModuleVersionOption_latest
+		}
+		req.updateStatus(fmt.Sprintf("retreiving versions for modules matching %q", req.modulePattern))
+		resp, err := ps.ListModuleVersions(ctx, &apiRequest)
+		if err != nil {
+			return nil, fmt.Errorf("todo: %w", err)
+		}
+
+		// API response is 1 result per module with a list of versions
+		// - flatten to 1 dependencyItem per module/version pair
+		for _, mod := range resp.Modules {
+			for _, ver := range mod.Versions {
+				results = append(results, dependencyItem{
+					Path:    mod.GetName(),
+					Version: ver,
+				})
+			}
+		}
+		pageToken = resp.GetNextPageToken()
+		done = (pageToken != "")
 	}
 	return results, nil
 }
@@ -570,4 +674,44 @@ func startSpinner(msg string) (update func(string), done func()) {
 		}
 	}
 	return update, done
+}
+
+// writeResults writes the contents of results to the provided io.Writer based on the configured output options
+func writeResults(w io.Writer, results []dependencyItem) error {
+	var err error
+	switch {
+	case formatTemplate != "":
+		// apply the provided text template
+		tt := template.New("item")
+		tt, err = tt.Parse(formatTemplate)
+		if err != nil {
+			return fmt.Errorf("Invalid Go text template specified: %w", err)
+		}
+		for _, e := range results {
+			if err := tt.Execute(w, e); err != nil {
+				return fmt.Errorf("Error applying Go text template: %w", err)
+			}
+			fmt.Fprintln(w)
+		}
+
+	case formatAsList:
+		// output a tabular list
+		tw := tabwriter.NewWriter(w, 10, 4, 2, ' ', 0)
+		defer func() { _ = tw.Flush() }()
+		if _, err := tw.Write([]byte("Module\tVersion\n")); err != nil {
+			return fmt.Errorf("Error writing tabular output: %w", err)
+		}
+		for _, e := range results {
+			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%s\n", e.Path, e.Version))); err != nil {
+				return fmt.Errorf("Error writing tabular output: %w", err)
+			}
+		}
+
+	default:
+		// output JSON
+		output, _ := json.Marshal(results)
+		_, _ = w.Write(output)
+		fmt.Fprintln(w)
+	}
+	return nil
 }

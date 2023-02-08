@@ -112,7 +112,15 @@ message ListModulesResponse {
 }
 
 message ListModuleVersionsRequest {
+  // if specified, return versions for this module
   string module_name = 1;
+  // glob pattern for the module(s) to return
+  string module_filter = 5;
+  // glob pattern for the version(s) to return
+  string version_filter = 6;
+  // indicates whether or not matching pre-release versions should be returned
+  bool include_prerelease = 7;
+  // indicates which matching version(s) should be returned
   ModuleVersionOption version_option = 2;
 
   string page_token = 3;
@@ -120,10 +128,9 @@ message ListModuleVersionsRequest {
 }
 
 message ListModuleVersionsResponse {
-  string module_name = 1;
-  repeated string versions = 2;
+  repeated Module modules = 1;
 
-  string next_page_token = 3;
+  string next_page_token = 2;
 }
 
 message UpdateDependenciesRequest {

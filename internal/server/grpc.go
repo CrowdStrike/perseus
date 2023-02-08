@@ -95,11 +95,14 @@ func (s *grpcServer) ListModules(ctx context.Context, req *perseusapi.ListModule
 }
 
 func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.ListModuleVersionsRequest) (*perseusapi.ListModuleVersionsResponse, error) {
-	debugLog("ListModuleVersions() called")
+	debugLog("ListModuleVersions() called: req=%s", req)
 
-	mod, vopt, pageToken := req.GetModuleName(), req.GetVersionOption(), req.GetPageToken()
+	mod, vfilter, vopt, pageToken := req.GetModuleName(), req.GetVersionFilter(), req.GetVersionOption(), req.GetPageToken()
 	if mod == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "The module name must be specified")
+		mod = req.GetModuleFilter()
+		if mod == "" {
+			return nil, status.Errorf(codes.InvalidArgument, "Either the module name or a module filter pattern must be specified")
+		}
 	}
 	switch vopt {
 	case perseusapi.ModuleVersionOption_none:
@@ -113,24 +116,36 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 	}
 
 	var (
-		vers []store.Version
+		vers []store.ModuleVersionQueryResult
 		err  error
 	)
-	vers, pageToken, err = s.store.QueryModuleVersions(ctx, req.GetModuleName(), req.GetPageToken(), int(req.GetPageSize()))
+	vers, pageToken, err = s.store.QueryModuleVersions(ctx, store.ModuleVersionQuery{
+		ModuleFilter:      mod,
+		VersionFilter:     vfilter,
+		IncludePrerelease: req.IncludePrerelease,
+		LatestOnly:        req.VersionOption == perseusapi.ModuleVersionOption_latest,
+		PageToken:         req.GetPageToken(),
+		Count:             int(req.GetPageSize()),
+	})
 	if err != nil {
 		debugLog("query module versions error: %v\n", err)
 		return nil, status.Errorf(codes.Internal, "Unable to retrieve version list for module %s: a database operation failed", req.GetModuleName())
 	}
 
 	resp := perseusapi.ListModuleVersionsResponse{
-		ModuleName:    req.GetModuleName(),
 		NextPageToken: pageToken,
 	}
+	// external API is 1 result per module with a list of versions so group the data layer results
+	// to match that structure
+	var currMod *perseusapi.Module
 	for _, v := range vers {
-		resp.Versions = append(resp.Versions, "v"+v.SemVer)
-		if req.GetVersionOption() == perseusapi.ModuleVersionOption_latest {
-			break
+		if currMod == nil || currMod.Name != v.Module {
+			currMod = &perseusapi.Module{
+				Name: v.Module,
+			}
+			resp.Modules = append(resp.Modules, currMod)
 		}
+		currMod.Versions = append(currMod.Versions, v.Version)
 	}
 
 	return &resp, nil

@@ -41,12 +41,35 @@
         "parameters": [
           {
             "name": "moduleName",
+            "description": "if specified, return versions for this module",
             "in": "query",
             "required": false,
             "type": "string"
           },
           {
+            "name": "moduleFilter",
+            "description": "glob pattern for the module(s) to return",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "versionFilter",
+            "description": "glob pattern for the version(s) to return",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "includePrerelease",
+            "description": "indicates whether or not matching pre-release versions should be returned",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
+          },
+          {
             "name": "versionOption",
+            "description": "indicates which matching version(s) should be returned",
             "in": "query",
             "required": false,
             "type": "string",
@@ -292,13 +315,10 @@
     "perseusapiListModuleVersionsResponse": {
       "type": "object",
       "properties": {
-        "moduleName": {
-          "type": "string"
-        },
-        "versions": {
+        "modules": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/definitions/perseusapiModule"
           }
         },
         "nextPageToken": {

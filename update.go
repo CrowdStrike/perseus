@@ -91,6 +91,10 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	// no info available (probably a skipped pre-release tag), so nothing to do
+	if info.Name == "" {
+		return nil
+	}
 
 	// send updates to the Perseus server
 	mod := module.Version{

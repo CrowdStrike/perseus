@@ -205,30 +205,53 @@ func (p *PostgresClient) QueryModules(ctx context.Context, nameFilter string, pa
 // The pageToken argument, if provided, should be the return value from a prior call to this method
 // with the same filter.  It will be decoded to determine the next "page" of results.  An invalid page
 // token will result in an error being returned.
-func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string, pageToken string, count int) (results []Version, nextPageToken string, err error) {
+func (p *PostgresClient) QueryModuleVersions(ctx context.Context, query ModuleVersionQuery) (results []ModuleVersionQueryResult, nextPageToken string, err error) {
 	offset := 0
-	if pageToken != "" {
+	if query.PageToken != "" {
 		var err error
-		offset, err = decodePageToken(pageToken, "moduleversions:"+module)
+		offset, err = decodePageToken(query.PageToken, query.pageTokenString())
 		if err != nil {
 			return nil, "", fmt.Errorf("invalid page token: %w", err)
 		}
 	}
 
-	if module == "" {
+	if query.ModuleFilter == "" {
 		return nil, "", fmt.Errorf("the module name must be specified")
 	}
+	var columnList []string
+	if query.LatestOnly {
+		columnList = []string{"m.name", "MAX(mv.version) AS version"}
+	} else {
+		columnList = []string{"m.name", "mv.version AS version"}
+	}
 	q := psql.
-		Select("mv.id", "mv.module_id", "mv.version AS version").
+		Select(columnList...).
 		From(tableModuleVersions + " mv").
-		Join(tableModules + " m ON (m.id = mv.module_id)").
-		Where(sq.Eq{"m.name": module}).
-		OrderBy("mv.version DESC")
+		Join(tableModules + " m ON (m.id = mv.module_id)")
+	if strings.ContainsAny(query.ModuleFilter, "*?") {
+		q = q.Where(sq.Like{"m.name": globToLike(query.ModuleFilter)})
+	} else {
+		q = q.Where(sq.Eq{"m.name": query.ModuleFilter})
+	}
+	if query.VersionFilter != "" {
+		if strings.ContainsAny(query.VersionFilter, "*?") {
+			q = q.Where(sq.Like{"mv.version::text": globToLike(query.VersionFilter)})
+		} else {
+			q = q.Where(sq.Eq{"mv.version": query.VersionFilter})
+		}
+	}
+	if !query.IncludePrerelease {
+		q = q.Where(sq.Eq{"get_semver_prerelease(mv.version)": ""})
+	}
+	if query.LatestOnly {
+		q = q.GroupBy("m.name")
+	}
+	q = q.OrderBy("1, 2 DESC")
 	if offset > 0 {
 		q = q.Offset(uint64(offset))
 	}
-	if count > 0 {
-		q = q.Limit(uint64(count))
+	if query.Count > 0 {
+		q = q.Limit(uint64(query.Count))
 	}
 
 	var (
@@ -240,12 +263,24 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, module string,
 		return nil, "", err
 	}
 
-	err = p.db.SelectContext(ctx, &results, sql, args...)
+	type queryResult struct {
+		ID       int32  `db:"id"`
+		ModuleID string `db:"module_id"`
+		Module   string `db:"name"`
+		SemVer   string `db:"version"`
+	}
+	var rows []queryResult
+	p.log("QueryModuleVersions:\nsql=%s\nargs=%v\n", sql, args)
+	err = p.db.SelectContext(ctx, &rows, sql, args...)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return results, encodePageToken("moduleversions:"+module, len(results), offset, count), nil
+	for _, row := range rows {
+		results = append(results, ModuleVersionQueryResult{Module: row.Module, Version: row.SemVer})
+	}
+
+	return results, encodePageToken(query.pageTokenString(), len(results), offset, query.Count), nil
 }
 
 // GetDependents retrieves all known module versions that depend on the given
@@ -309,19 +344,8 @@ func applyNameFilter(q sq.SelectBuilder, nameFilter string) sq.SelectBuilder {
 		return q
 	}
 	// translate glob ? and * wildcards to SQL equivalents
-	hasWildcards := false
-	where := strings.Map(func(c rune) rune {
-		switch c {
-		case '?':
-			hasWildcards = true
-			return '_'
-		case '*':
-			hasWildcards = true
-			return '%'
-		default:
-			return c
-		}
-	}, nameFilter)
+	hasWildcards := strings.ContainsAny(nameFilter, "*?")
+	where := globToLike(nameFilter)
 	// treat a filter with no wildards as a "contains" substring match
 	if !hasWildcards {
 		where = "%" + where + "%"
@@ -447,4 +471,24 @@ func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType stri
 	}
 
 	return dependents, encodePageToken(pageTokenKey, len(dependents), offset, count), nil
+}
+
+// globToLike converts a string containing a glob pattern to a SQL LIKE clause.
+func globToLike(glob string) string {
+	var res strings.Builder
+	for _, c := range glob {
+		switch c {
+		case '%', '_':
+			// need to escape LIKE pattern tokens
+			res.WriteRune('\\')
+			res.WriteRune(c)
+		case '*':
+			res.WriteRune('%')
+		case '?':
+			res.WriteRune('_')
+		default:
+			res.WriteRune(c)
+		}
+	}
+	return res.String()
 }
