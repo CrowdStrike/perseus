@@ -297,7 +297,7 @@ func (p *PostgresClient) GetDependees(ctx context.Context, id, version string, p
 
 // getModuleVersionID executes a database query to translate the specified module and version to the
 // corresponding PKEY in the module_version table, creating the module and/or version if necessary
-func getModuleVersionID(ctx context.Context, db database, mod, ver string, log func(string, ...any)) (int32, error) {
+func getModuleVersionID(ctx context.Context, db database, mod, ver string, log func(string, ...any)) (int32, error) { //nolint: unused // not calling this but hanging onto it for now
 	q := psql.
 		Select("mv.id").
 		From("module_version mv").
