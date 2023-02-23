@@ -81,7 +81,7 @@ func runServer(opts ...serverOption) error {
 	}
 	defer func() {
 		if err := lis.Close(); err != nil {
-			debugLog("unexpected error closing TCP listener: %v", err)
+			debugLog("unexpected error closing TCP listener", "err", err)
 		}
 	}()
 
@@ -90,13 +90,13 @@ func runServer(opts ...serverOption) error {
 	grpcLis := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
 	defer func() {
 		if err := grpcLis.Close(); err != nil {
-			debugLog("unexpected error closing gRPC mux listener: %v", err)
+			debugLog("unexpected error closing gRPC mux listener", "err", err)
 		}
 	}()
 	httpLis := mux.Match(cmux.HTTP1Fast(http.MethodPatch))
 	defer func() {
 		if err := httpLis.Close(); err != nil {
-			debugLog("unexpected error closing HTTP mux listener: %v", err)
+			debugLog("unexpected error closing HTTP mux listener", "err", err)
 		}
 	}()
 
@@ -109,14 +109,18 @@ func runServer(opts ...serverOption) error {
 	if err != nil {
 		return fmt.Errorf("could not connect to the database: %w", err)
 	}
-	debugLog("connected to the database at %s", connStr)
+	debugLog("connected to the database", "connectionString", connStr)
 
-	// spin up gRPC and HTTP servers
-	grpcSrv := grpc.NewServer()
-	// TODO: apply interceptors, etc.
+	// spin up gRPC server
+	grpcOpts := []grpc.ServerOption{
+		// TODO: apply interceptors, etc.
+	}
+	grpcSrv := grpc.NewServer(grpcOpts...)
 	apiSrv := newGRPCServer(db)
 	perseusapi.RegisterPerseusServiceServer(grpcSrv, apiSrv)
-	httpSrv := newHTTPServer(ctx, conf.listenAddr)
+
+	// spin up HTTP server
+	httpSrv := newHTTPServer(ctx, conf.listenAddr, db)
 
 	// start services
 	// . use x/sync/errgroup so we can stop everything at once via the context
@@ -147,9 +151,9 @@ func runServer(opts ...serverOption) error {
 			case sig := <-sigs:
 				switch sig {
 				case syscall.SIGHUP:
-					debugLog("Got SIGNUP signal, TODO - reload config\n")
+					debugLog("Got SIGNUP signal, TODO - reload config")
 				default:
-					debugLog("Got [%s] signal, shutting down\n", sig)
+					debugLog("Got stop signal, shutting down", "signal", sig.String())
 					return nil
 				}
 			case <-ctx.Done():
@@ -160,7 +164,7 @@ func runServer(opts ...serverOption) error {
 
 	// spin up the cmux
 	go func() { _ = mux.Serve() }()
-	debugLog("Server listening at %s", conf.listenAddr)
+	debugLog("Server listening", "addr", conf.listenAddr)
 	defer debugLog("Server exited")
 	// wait for shutdown
 	if err := eg.Wait(); err != nil && err != context.Canceled {
@@ -172,10 +176,11 @@ func runServer(opts ...serverOption) error {
 
 // newHTTPServer initializes and configures a new http.ServerMux that serves the gRPC Gateway REST
 // API and the UI
-func newHTTPServer(ctx context.Context, grpcAddr string) http.Server {
+func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store) http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", handleGrpcGateway(ctx, grpcAddr))
 	mux.Handle("/ui/", handleUX())
+	mux.Handle("/healthz/", handleHealthz(db))
 	return http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: time.Second,

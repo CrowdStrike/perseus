@@ -77,7 +77,7 @@ func (conf *clientConfig) dialServer() (client perseusapi.PerseusServiceClient, 
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), // TODO: support TLS
 	}
-	debugLog("connecting to Perseus server at %s", conf.serverAddr)
+	debugLog("connecting to Perseus server", "addr", conf.serverAddr)
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, conf.serverAddr, dialOpts...)

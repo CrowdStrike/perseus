@@ -25,7 +25,7 @@ do
     -s|--server)
         SERVER_ADDR=$2
         if [ -z $SERVER_ADDR ]; then
-            echo The Perseus server address (host:port) is required after -s/--server.
+            echo The Perseus server address \(host:port\) is required after -s/--server.
             exit 1
         fi
         shift # past flag

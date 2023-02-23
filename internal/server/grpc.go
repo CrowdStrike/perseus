@@ -35,7 +35,7 @@ func newGRPCServer(store store.Store) perseusapi.PerseusServiceServer {
 }
 
 func (s *grpcServer) CreateModule(ctx context.Context, req *perseusapi.CreateModuleRequest) (*perseusapi.CreateModuleResponse, error) {
-	debugLog("CreateModule() called\ncreating new module %q with version(s) %v\n", req.GetModule().GetName(), req.GetModule().GetVersions())
+	debugLog("CreateModule() called", "module", req.GetModule().GetName(), "versions", req.GetModule().GetVersions())
 
 	m := req.GetModule()
 	if m.GetName() == "" {
@@ -63,7 +63,7 @@ func (s *grpcServer) CreateModule(ctx context.Context, req *perseusapi.CreateMod
 
 	err := s.store.SaveModule(ctx, m.GetName(), "", m.GetVersions()...)
 	if err != nil {
-		debugLog("save module error: %v\n", err)
+		debugLog("unable to save module", "module", m.GetName(), "err", err)
 		return nil, status.Errorf(codes.Internal, fmt.Sprintf("unable to save module %q: a database operation failed", m.GetName()))
 	}
 
@@ -74,12 +74,11 @@ func (s *grpcServer) CreateModule(ctx context.Context, req *perseusapi.CreateMod
 }
 
 func (s *grpcServer) ListModules(ctx context.Context, req *perseusapi.ListModulesRequest) (*perseusapi.ListModulesResponse, error) {
-	debugLog("ListModules() called")
-	debugLog("args: %s", req.String())
+	debugLog("ListModules() called", "args", req.String())
 
 	mods, pageToken, err := s.store.QueryModules(ctx, req.Filter, req.PageToken, int(req.PageSize))
 	if err != nil {
-		debugLog("query modules error: %v\n", err)
+		debugLog("unable to query modules", "filter", req.Filter, "err", err)
 		return nil, status.Errorf(codes.Internal, "Unable to query the database")
 	}
 	resp := perseusapi.ListModulesResponse{
@@ -95,7 +94,7 @@ func (s *grpcServer) ListModules(ctx context.Context, req *perseusapi.ListModule
 }
 
 func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.ListModuleVersionsRequest) (*perseusapi.ListModuleVersionsResponse, error) {
-	debugLog("ListModuleVersions() called: req=%s", req)
+	debugLog("ListModuleVersions() called", "req", req)
 
 	mod, vfilter, vopt, pageToken := req.GetModuleName(), req.GetVersionFilter(), req.GetVersionOption(), req.GetPageToken()
 	if mod == "" {
@@ -128,7 +127,7 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 		Count:             int(req.GetPageSize()),
 	})
 	if err != nil {
-		debugLog("query module versions error: %v\n", err)
+		debugLog("unable to query module versions", "moduleFilter", mod, "versionFilter", vfilter, "err", err)
 		return nil, status.Errorf(codes.Internal, "Unable to retrieve version list for module %s: a database operation failed", req.GetModuleName())
 	}
 
@@ -152,8 +151,7 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 }
 
 func (s *grpcServer) QueryDependencies(ctx context.Context, req *perseusapi.QueryDependenciesRequest) (*perseusapi.QueryDependenciesResponse, error) {
-	debugLog("QueryDependencies() called")
-	debugLog("request: %s\n", req.String())
+	debugLog("QueryDependencies() called", "request", req.String())
 
 	modName, modVer := req.GetModuleName(), req.GetVersion()
 	if err := module.Check(modName, modVer); err != nil {
@@ -171,7 +169,7 @@ func (s *grpcServer) QueryDependencies(ctx context.Context, req *perseusapi.Quer
 		deps, pageToken, err = s.store.GetDependents(ctx, modName, strings.TrimPrefix(modVer, "v"), req.GetPageToken(), int(req.GetPageSize()))
 	}
 	if err != nil {
-		debugLog("query error: %v", err)
+		debugLog("unable to query module dependencies", "module", modName, "version", modVer, "direction", req.GetDirection().String(), "err", err)
 		return nil, status.Errorf(codes.Internal, "Unable to query the graph: a database operation failed")
 	}
 	resp := perseusapi.QueryDependenciesResponse{
@@ -187,8 +185,7 @@ func (s *grpcServer) QueryDependencies(ctx context.Context, req *perseusapi.Quer
 }
 
 func (s *grpcServer) UpdateDependencies(ctx context.Context, req *perseusapi.UpdateDependenciesRequest) (*perseusapi.UpdateDependenciesResponse, error) {
-	debugLog("UpdateDependencies() called")
-	debugLog("args: %v", req)
+	debugLog("UpdateDependencies() called", "args", req)
 
 	modName, modVer := req.GetModuleName(), req.GetVersion()
 	if err := module.Check(modName, modVer); err != nil {
@@ -214,7 +211,7 @@ func (s *grpcServer) UpdateDependencies(ctx context.Context, req *perseusapi.Upd
 	}
 
 	if err := s.store.SaveModuleDependencies(ctx, mod, deps...); err != nil {
-		debugLog("error writing module dependencies: %v\n", err)
+		debugLog("unable to save module dependencies", "module", mod, "err", err)
 		return nil, status.Errorf(codes.Internal, "Unable to update the graph: database operation failed")
 	}
 

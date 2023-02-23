@@ -7,6 +7,8 @@ import (
 
 // Store defines the operations available on a Perseus data store
 type Store interface {
+	Ping(ctx context.Context) error
+
 	SaveModule(ctx context.Context, name, description string, versions ...string) error
 	SaveModuleDependencies(ctx context.Context, mod Version, deps ...Version) error
 
