@@ -24,10 +24,10 @@ var (
 )
 
 const updateExampleUsage = `perseus update -p . --version v0.11.38
-perseus update --path $HOME/dev/go/foo --version v1.0.0
-perseus update -p $HOME/dev/go/bar
-perseus update --module golang.org/x/sys
-perseus update -m github.com/rs/zerolog -v v1.28.0`
+	perseus update --path $HOME/dev/go/foo --version v1.0.0
+	perseus update -p $HOME/dev/go/bar
+	perseus update --module golang.org/x/sys
+	perseus update -m github.com/rs/zerolog -v v1.28.0`
 
 // createUpdateCommand initializes and returns a *cobra.Command that implements the 'update' CLI sub-command
 func createUpdateCommand() *cobra.Command {
@@ -40,7 +40,7 @@ func createUpdateCommand() *cobra.Command {
 	}
 	fset := cmd.Flags()
 	fset.VarP(&moduleVersion, "version", "v", "specifies the version of the Go module to be processed.")
-	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
+	fset.String("server-addr", os.Getenv("PERSEUS_SERVER_ADDR"), "the TCP host and port of the Perseus server (default is $PERSEUS_SERVER_ADDR environment variable)")
 	fset.BoolVar(&includePrerelease, "prerelease", false, "if specified, include pre-release tags when processing the module")
 	fset.StringP("path", "p", "", "specifies the local path on disk to a Go module repository")
 	fset.StringP("module", "m", "", "specifies the module path of a public Go module")
