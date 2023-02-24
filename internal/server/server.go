@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -113,11 +115,12 @@ func runServer(opts ...serverOption) error {
 
 	// spin up gRPC server
 	grpcOpts := []grpc.ServerOption{
-		// TODO: apply interceptors, etc.
+		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
 	}
 	grpcSrv := grpc.NewServer(grpcOpts...)
 	apiSrv := newGRPCServer(db)
 	perseusapi.RegisterPerseusServiceServer(grpcSrv, apiSrv)
+	grpc_prometheus.Register(grpcSrv)
 
 	// spin up HTTP server
 	httpSrv := newHTTPServer(ctx, conf.listenAddr, db)
@@ -181,6 +184,7 @@ func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store) http.Se
 	mux.Handle("/", handleGrpcGateway(ctx, grpcAddr))
 	mux.Handle("/ui/", handleUX())
 	mux.Handle("/healthz/", handleHealthz(db))
+	mux.Handle("/metrics/", promhttp.Handler())
 	return http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: time.Second,
