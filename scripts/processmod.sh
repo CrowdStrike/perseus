@@ -23,8 +23,8 @@ do
         shift; ## past flag
         ;;
     -s|--server)
-        SERVER_ADDR=$2
-        if [ -z $SERVER_ADDR ]; then
+        PERSEUS_SERVER_ADDR=$2
+        if [ -z $PERSEUS_SERVER_ADDR ]; then
             echo The Perseus server address \(host:port\) is required after -s/--server.
             exit 1
         fi
@@ -57,9 +57,9 @@ fi
 _PERSEUS_INITIAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 # set Perseus server location if unset
-if [ -z "${SERVER_ADDR}" ]; then
+if [ -z "${PERSEUS_SERVER_ADDR}" ]; then
     echo "defaulting to Perseus server at localhost:31138"
-    export SERVER_ADDR=localhost:31138
+    export PERSEUS_SERVER_ADDR=localhost:31138
 fi
 
 # let's go

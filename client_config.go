@@ -36,7 +36,7 @@ func withServerAddress(addr string) clientOption {
 func readClientConfigEnv() []clientOption {
 	var opts []clientOption
 
-	if addr := os.Getenv("SERVER_ADDR"); addr != "" {
+	if addr := os.Getenv("PERSEUS_SERVER_ADDR"); addr != "" {
 		opts = append(opts, withServerAddress(addr))
 	}
 
