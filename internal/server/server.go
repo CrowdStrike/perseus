@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
@@ -177,14 +178,25 @@ func runServer(opts ...serverOption) error {
 	return nil
 }
 
-// newHTTPServer initializes and configures a new http.ServerMux that serves the gRPC Gateway REST
-// API and the UI
+// newHTTPServer initializes and configures a new http.ServerMux that serves various endpoints.
+//
+// The supported paths are:
+//   - /api/v1/* - gRPC Gateway REST mappings for the gRPC endpoints
+//   - /ui/ - web UI
+//   - /healthz/ - server health checks
+//   - /metrics/ - Prometheus server metrics
+//   - /debug/pprof/* - pprof runtime profiles
 func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store) http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", handleGrpcGateway(ctx, grpcAddr))
 	mux.Handle("/ui/", handleUX())
 	mux.Handle("/healthz/", handleHealthz(db))
 	mux.Handle("/metrics/", promhttp.Handler())
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	return http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: time.Second,
