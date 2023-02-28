@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"time"
 
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"google.golang.org/grpc"
@@ -45,7 +46,9 @@ func handleUX() http.Handler {
 // healthy (can connect to the Perseus database) and '500 Internal Server Error' if not
 func handleHealthz(db store.Store) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := db.Ping(r.Context()); err != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 300*time.Millisecond)
+		defer cancel()
+		if err := db.Ping(ctx); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			fmt.Fprintf(w, "a connection to the database is unavailable")
 			return
