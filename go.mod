@@ -15,7 +15,7 @@ require (
 	github.com/stretchr/testify v1.8.2
 	github.com/theckman/yacspin v0.13.12
 	golang.org/x/exp v0.0.0-20230223201515-30ed42f936dd
-	golang.org/x/mod v0.8.0
+	golang.org/x/mod v0.9.0
 	google.golang.org/genproto v0.0.0-20230221151758-ace64dc21148
 	google.golang.org/grpc v1.53.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
