@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/Masterminds/squirrel v1.5.3
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2
 	github.com/go-git/go-git/v5 v5.6.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.1
 	github.com/jackc/pgx/v4 v4.18.1
@@ -16,7 +17,7 @@ require (
 	github.com/theckman/yacspin v0.13.12
 	golang.org/x/exp v0.0.0-20230223201515-30ed42f936dd
 	golang.org/x/mod v0.9.0
-	google.golang.org/genproto v0.0.0-20230221151758-ace64dc21148
+	google.golang.org/genproto v0.0.0-20230223222841-637eb2293923
 	google.golang.org/grpc v1.53.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.28.1
