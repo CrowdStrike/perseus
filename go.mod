@@ -4,9 +4,8 @@ go 1.18
 
 require (
 	github.com/Masterminds/squirrel v1.5.3
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2
 	github.com/go-git/go-git/v5 v5.6.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.1
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.15.2
 	github.com/jackc/pgx/v4 v4.18.1
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mattn/go-isatty v0.0.17
