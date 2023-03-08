@@ -65,7 +65,7 @@ func createQueryCommand() *cobra.Command {
 		SilenceUsage: true,
 	}
 	fset := cmd.PersistentFlags()
-	fset.String("server-addr", "", "the TCP host and port of the Perseus server")
+	fset.String("server-addr", os.Getenv("PERSEUS_SERVER_ADDR"), "the TCP host and port of the Perseus server (default is $PERSEUS_SERVER_ADDR environment variable)")
 	fset.BoolVar(&formatAsJSON, "json", false, "specifies that the output should be formatted as JSON")
 	fset.BoolVar(&formatAsList, "list", false, "specifies that the output should be formatted as a tabular list")
 	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph (not supported for list-modules or list-module-versions)")

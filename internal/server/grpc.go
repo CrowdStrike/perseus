@@ -144,7 +144,7 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 			}
 			resp.Modules = append(resp.Modules, currMod)
 		}
-		currMod.Versions = append(currMod.Versions, v.Version)
+		currMod.Versions = append(currMod.Versions, "v"+v.Version)
 	}
 
 	return &resp, nil

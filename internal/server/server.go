@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/soheilhy/cmux"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -72,6 +75,9 @@ func runServer(opts ...serverOption) error {
 	if conf.dbAddr == "" || conf.dbUser == "" || conf.dbPwd == "" {
 		return fmt.Errorf("the host, user name, and password for the Perseus database must be specified")
 	}
+	if conf.healthzTimeout <= 0 {
+		conf.healthzTimeout = 300 * time.Millisecond
+	}
 
 	debugLog("starting the server")
 	// create the root listener for cmux
@@ -113,14 +119,15 @@ func runServer(opts ...serverOption) error {
 
 	// spin up gRPC server
 	grpcOpts := []grpc.ServerOption{
-		// TODO: apply interceptors, etc.
+		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
 	}
 	grpcSrv := grpc.NewServer(grpcOpts...)
 	apiSrv := newGRPCServer(db)
 	perseusapi.RegisterPerseusServiceServer(grpcSrv, apiSrv)
+	grpc_prometheus.Register(grpcSrv)
 
 	// spin up HTTP server
-	httpSrv := newHTTPServer(ctx, conf.listenAddr, db)
+	httpSrv := newHTTPServer(ctx, conf.listenAddr, db, conf.healthzTimeout)
 
 	// start services
 	// . use x/sync/errgroup so we can stop everything at once via the context
@@ -174,13 +181,25 @@ func runServer(opts ...serverOption) error {
 	return nil
 }
 
-// newHTTPServer initializes and configures a new http.ServerMux that serves the gRPC Gateway REST
-// API and the UI
-func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store) http.Server {
+// newHTTPServer initializes and configures a new http.ServerMux that serves various endpoints.
+//
+// The supported paths are:
+//   - /api/v1/* - gRPC Gateway REST mappings for the gRPC endpoints
+//   - /ui/ - web UI
+//   - /healthz/ - server health checks
+//   - /metrics/ - Prometheus server metrics
+//   - /debug/pprof/* - pprof runtime profiles
+func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store, healthzTimeout time.Duration) http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", handleGrpcGateway(ctx, grpcAddr))
 	mux.Handle("/ui/", handleUX())
-	mux.Handle("/healthz/", handleHealthz(db))
+	mux.Handle("/healthz", handleHealthz(db, healthzTimeout))
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
 	return http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: time.Second,
