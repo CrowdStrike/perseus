@@ -2,6 +2,7 @@ package server
 
 import (
 	"os"
+	"time"
 
 	"github.com/spf13/pflag"
 )
@@ -12,6 +13,8 @@ type serverConfig struct {
 	listenAddr string
 
 	dbAddr, dbUser, dbPwd, dbName string
+
+	healthzTimeout time.Duration
 }
 
 type serverOption func(*serverConfig) error
@@ -54,6 +57,16 @@ func withDBName(db string) serverOption {
 	}
 }
 
+func withHealthCheckTimeout(d time.Duration) serverOption {
+	return func(conf *serverConfig) error {
+		if d < 0 {
+			d = 0
+		}
+		conf.healthzTimeout = d
+		return nil
+	}
+}
+
 func readServerConfigEnv() []serverOption {
 	var opts []serverOption
 
@@ -72,6 +85,11 @@ func readServerConfigEnv() []serverOption {
 	}
 	if db := os.Getenv("DB_NAME"); db != "" {
 		opts = append(opts, withDBName(db))
+	}
+	if t := os.Getenv("HEALTHZ_TIMEOUT"); t != "" {
+		if d, err := time.ParseDuration(t); err == nil {
+			opts = append(opts, withHealthCheckTimeout(d))
+		}
 	}
 
 	return opts

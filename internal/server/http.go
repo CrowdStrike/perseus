@@ -44,9 +44,9 @@ func handleUX() http.Handler {
 
 // handleHealthz exposes an HTTP health check endpoint that responds with '200 OK' if the service is
 // healthy (can connect to the Perseus database) and '500 Internal Server Error' if not
-func handleHealthz(db store.Store) http.Handler {
+func handleHealthz(db store.Store, timeout time.Duration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(r.Context(), 300*time.Millisecond)
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
 		if err := db.Ping(ctx); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

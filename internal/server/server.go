@@ -75,6 +75,9 @@ func runServer(opts ...serverOption) error {
 	if conf.dbAddr == "" || conf.dbUser == "" || conf.dbPwd == "" {
 		return fmt.Errorf("the host, user name, and password for the Perseus database must be specified")
 	}
+	if conf.healthzTimeout <= 0 {
+		conf.healthzTimeout = 300 * time.Millisecond
+	}
 
 	debugLog("starting the server")
 	// create the root listener for cmux
@@ -124,7 +127,7 @@ func runServer(opts ...serverOption) error {
 	grpc_prometheus.Register(grpcSrv)
 
 	// spin up HTTP server
-	httpSrv := newHTTPServer(ctx, conf.listenAddr, db)
+	httpSrv := newHTTPServer(ctx, conf.listenAddr, db, conf.healthzTimeout)
 
 	// start services
 	// . use x/sync/errgroup so we can stop everything at once via the context
@@ -186,11 +189,11 @@ func runServer(opts ...serverOption) error {
 //   - /healthz/ - server health checks
 //   - /metrics/ - Prometheus server metrics
 //   - /debug/pprof/* - pprof runtime profiles
-func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store) http.Server {
+func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store, healthzTimeout time.Duration) http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/", handleGrpcGateway(ctx, grpcAddr))
 	mux.Handle("/ui/", handleUX())
-	mux.Handle("/healthz/", handleHealthz(db))
+	mux.Handle("/healthz/", handleHealthz(db, healthzTimeout))
 	mux.Handle("/metrics/", promhttp.Handler())
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
