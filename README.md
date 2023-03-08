@@ -82,7 +82,7 @@ a version.
     > perseus update --path ~/code/github.com/CrowdStrike/perseus
 
     # process a specific version of example/foo
-    > perseus update --path ~/code/github.com/example/foo -version v1.2.3
+    > perseus update --path ~/code/github.com/example/foo --version v1.2.3
 
 For public modules a version must always be specified.
 
