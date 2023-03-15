@@ -21,13 +21,6 @@ import (
 	"github.com/CrowdStrike/perseus/perseusapi"
 )
 
-// package variables to hold CLI flag values
-var (
-	formatAsJSON, formatAsList, formatAsDotGraph bool
-	formatTemplate                               string
-	maxDepth                                     int
-)
-
 const (
 	goTemplateArgUsage = `provides a Go text template to format the output.
 Each result is an instance of the following struct:
@@ -71,6 +64,7 @@ func createQueryCommand() *cobra.Command {
 	fset.BoolVar(&formatAsDotGraph, "dot", false, "specifies that the output should be a DOT directed graph (not supported for list-modules or list-module-versions)")
 	fset.StringVarP(&formatTemplate, "format", "f", "", goTemplateArgUsage)
 	fset.IntVar(&maxDepth, "max-depth", 4, "specifies the maximum number of levels to be returned")
+	fset.BoolVar(&disableTLS, "insecure", false, "do not use TLS when connecting to the Perseus server")
 
 	listModulesCmd := cobra.Command{
 		Use:          "list-modules [pattern]",
