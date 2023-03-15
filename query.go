@@ -437,18 +437,32 @@ func listModules(ctx context.Context, ps perseusapi.PerseusServiceClient, filter
 			return nil, fmt.Errorf("todo: %w", err)
 		}
 		for _, mod := range resp.Modules {
+			status(fmt.Sprintf("determining latest version for %s", mod.GetName()))
 			req2 := perseusapi.ListModuleVersionsRequest{
 				ModuleName:    mod.GetName(),
 				VersionOption: perseusapi.ModuleVersionOption_latest,
 			}
-			status(fmt.Sprintf("determining latest version for %s", mod.GetName()))
 			resp2, err := ps.ListModuleVersions(ctx, &req2)
-			if err != nil {
-				return nil, fmt.Errorf("todo: %w", err)
-			}
+			switch {
+			case err != nil:
+				return nil, fmt.Errorf("Unable to determine the current version for %s: %w", mod.GetName(), err)
 
-			if len(resp2.Modules) == 0 || len(resp2.Modules[0].Versions) == 0 {
-				return nil, fmt.Errorf("Unable to determine the current version for %s", mod.GetName())
+			case len(resp2.Modules) == 0 || len(resp2.Modules[0].Versions) == 0:
+				status(fmt.Sprintf("no stable version found for %s, trying to find a pre-release", mod.GetName()))
+				req2.IncludePrerelease = true
+				resp2, err = ps.ListModuleVersions(ctx, &req2)
+				switch {
+				case err != nil:
+					return nil, fmt.Errorf("Unable to determine the current version for %s: %w", mod.GetName(), err)
+
+				case len(resp2.Modules) == 0 || len(resp2.Modules[0].Versions) == 0:
+					return nil, fmt.Errorf("No versions found for %s", mod.GetName())
+
+				default:
+					// got it
+				}
+			default:
+				// got it
 			}
 
 			results = append(results, dependencyItem{
