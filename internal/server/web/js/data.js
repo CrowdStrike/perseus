@@ -9,9 +9,14 @@ const listModules = async () => {
 const getModuleVersions = (module) => {
   return fetch(
     `${apiBase}/module-versions?module_name=${module}&version_option=all`
-  )
+    )
     .then((data) => data.json())
-    .then((resp) => resp.versions);
+    .then((resp) => {
+      // API response structure is 1-element array of modules
+      //  {"modules":[{"name": "github.com/example/foo", "versions":["v0.1.0", "v0.2.0", ...]}]}
+      //
+      return resp.modules[0].versions
+    });
 };
 
 const getModuleDeps = (module, version, direction) => {
@@ -20,6 +25,10 @@ const getModuleDeps = (module, version, direction) => {
   )
     .then((data) => data.json())
     .then((resp) => {
+      // API response structure is an array of modules that are direct dependencies/dependants of
+      // the current module, each with a single version
+      //  {"modules":[{"name": "github.com/example/foo", "versions":["v0.1.0"]}, ...]}
+      //
       const fqmn = `${module}@${version}`;
 
       let out = { nodes: [], links: [] };
