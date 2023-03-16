@@ -44,6 +44,7 @@ func createUpdateCommand() *cobra.Command {
 	fset.BoolVar(&includePrerelease, "prerelease", false, "if specified, include pre-release tags when processing the module")
 	fset.StringP("path", "p", "", "specifies the local path on disk to a Go module repository")
 	fset.StringP("module", "m", "", "specifies the module path of a public Go module")
+	fset.BoolVar(&disableTLS, "insecure", false, "do not use TLS when connecting to the Perseus server")
 
 	return &cmd
 }

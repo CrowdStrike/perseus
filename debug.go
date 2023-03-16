@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -51,10 +52,13 @@ func debugLog(msg string, kvs ...any) {
 		return
 	}
 
-	nattrs := len(kvs) / 2
-	attrs := make([]slog.Attr, nattrs)
-	for i := 0; i < nattrs; i += 2 {
-		attrs[i] = slog.Any(kvs[i].(string), kvs[i+1])
+	attrs := make([]slog.Attr, 0, len(kvs)/2)
+	for i := 0; i < len(kvs); i += 2 {
+		k, ok := kvs[i].(string)
+		if !ok {
+			k = fmt.Sprintf("%v", kvs[i])
+		}
+		attrs = append(attrs, slog.Any(k, kvs[i+1]))
 	}
 	logger.LogAttrsDepth(1, slog.LevelDebug, msg, attrs...)
 }
