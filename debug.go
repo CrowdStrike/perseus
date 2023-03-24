@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/exp/slog"
 )
@@ -47,8 +51,16 @@ func debugLog(msg string, kvs ...any) {
 		}
 	})
 
+	// golang.org/x/exp is still technically unstable and we'd rather eat a panic than crash
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "panic caught while writing debug log\n\t%v\n%s", r, string(debug.Stack()))
+		}
+	}()
+
+	ctx := context.Background()
 	if len(kvs) == 0 {
-		logger.LogDepth(1, slog.LevelDebug, msg)
+		logger.Log(ctx, slog.LevelDebug, msg)
 		return
 	}
 
@@ -60,7 +72,14 @@ func debugLog(msg string, kvs ...any) {
 		}
 		attrs = append(attrs, slog.Any(k, kvs[i+1]))
 	}
-	logger.LogAttrsDepth(1, slog.LevelDebug, msg, attrs...)
+	var pcs [1]uintptr
+	runtime.Callers(1, pcs[:])
+	rec := slog.NewRecord(time.Now(), slog.LevelDebug, msg, pcs[0])
+	rec.AddAttrs(attrs...)
+	// TODO: what should we do if this call to logger.Handler().Handle() fails?
+	_ = logger.Handler().Handle(ctx, rec)
+
+	_ = attrs[len(kvs)]
 }
 
 func inK8S() bool {
