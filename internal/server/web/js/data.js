@@ -8,7 +8,7 @@ const listModules = async () => {
 
 const getModuleVersions = (module) => {
   return fetch(
-    `${apiBase}/module-versions?module_name=${module}&version_option=all`
+    `${apiBase}/module-versions?module_name=${module}&version_option=all&include_prerelease=true`
     )
     .then((resp) => resp.json())
     .then((data) => {
