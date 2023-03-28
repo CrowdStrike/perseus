@@ -115,7 +115,7 @@ func runServer(opts ...serverOption) error {
 	if err != nil {
 		return fmt.Errorf("could not connect to the database: %w", err)
 	}
-	debugLog("connected to the database", "connectionString", connStr)
+	debugLog("connected to the database", "addr", conf.dbAddr, "database", conf.dbName, "user", conf.dbUser)
 
 	// spin up gRPC server
 	grpcOpts := []grpc.ServerOption{

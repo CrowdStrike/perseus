@@ -59,27 +59,24 @@ func debugLog(msg string, kvs ...any) {
 	}()
 
 	ctx := context.Background()
-	if len(kvs) == 0 {
-		logger.Log(ctx, slog.LevelDebug, msg)
-		return
+	var pcs [1]uintptr
+	runtime.Callers(2, pcs[:])
+	rec := slog.NewRecord(time.Now().UTC(), slog.LevelDebug, msg, pcs[0])
+
+	if len(kvs) > 0 {
+		attrs := make([]slog.Attr, 0, len(kvs)/2)
+		for i := 0; i < len(kvs); i += 2 {
+			k, ok := kvs[i].(string)
+			if !ok {
+				k = fmt.Sprintf("%v", kvs[i])
+			}
+			attrs = append(attrs, slog.Any(k, kvs[i+1]))
+		}
+		rec.AddAttrs(attrs...)
 	}
 
-	attrs := make([]slog.Attr, 0, len(kvs)/2)
-	for i := 0; i < len(kvs); i += 2 {
-		k, ok := kvs[i].(string)
-		if !ok {
-			k = fmt.Sprintf("%v", kvs[i])
-		}
-		attrs = append(attrs, slog.Any(k, kvs[i+1]))
-	}
-	var pcs [1]uintptr
-	runtime.Callers(1, pcs[:])
-	rec := slog.NewRecord(time.Now(), slog.LevelDebug, msg, pcs[0])
-	rec.AddAttrs(attrs...)
 	// TODO: what should we do if this call to logger.Handler().Handle() fails?
 	_ = logger.Handler().Handle(ctx, rec)
-
-	_ = attrs[len(kvs)]
 }
 
 func inK8S() bool {
