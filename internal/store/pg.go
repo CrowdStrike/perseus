@@ -107,9 +107,6 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 	if mod.ModuleID == "" || mod.SemVer == "" {
 		return fmt.Errorf("invalid module, both the module name and version must be specified")
 	}
-	if len(deps) == 0 {
-		return nil
-	}
 	var txn *sql.Tx
 	txn, err = p.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -119,10 +116,13 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 		if err == nil {
 			err = txn.Commit()
 		} else {
-			_ = txn.Rollback()
+			if e2 := txn.Rollback(); e2 != nil {
+				p.log("error rolling back transaction after error", "error", err, "rollbackError", e2)
+			}
 		}
 	}()
 
+	p.log("saving module", "moduleName", mod.ModuleID, "version", mod.SemVer)
 	pkey, err := writeModule(ctx, txn, mod.ModuleID, "")
 	if err != nil {
 		return err
@@ -131,12 +131,14 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 	if err != nil {
 		return err
 	}
-	_ = versionIDs
-
+	if len(deps) == 0 {
+		return nil
+	}
 	cmd := psql.
 		Insert("module_dependency").
 		Columns("dependent_id", "dependee_id")
 	for _, d := range deps {
+		p.log("saving dependency", "moduleName", d.ModuleID, "version", d.SemVer)
 		pkey, err := writeModule(ctx, txn, d.ModuleID, "")
 		if err != nil {
 			return err
