@@ -149,7 +149,7 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 		}
 		cmd = cmd.Values(versionIDs[0], vids[0])
 	}
-	sql, args, err := cmd.Suffix("ON CONFLICT (dependent_id, dependee_id) DO NOTHING").ToSql()
+	sql, args, err := cmd.Suffix("ON CONFLICT (dependent_id, dependee_id) DO UPDATE SET dependent_id = EXCLUDED.dependent_id").ToSql()
 	p.log("upsert module dependencies", "sql", sql, "args", args, "err", err)
 	if err != nil {
 		return fmt.Errorf("error constructing SQL query: %w", err)
