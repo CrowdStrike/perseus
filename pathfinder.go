@@ -69,7 +69,7 @@ func (pf *pathFinder) findPathsBetween(ctx context.Context, from, to module.Vers
 // and to.  If a dependency is found, a result is produced to rc.
 func (pf *pathFinder) xxx(ctx context.Context, chain []module.Version, to module.Version, depth int, rc chan pathFinderResult) {
 	// grab the semaphore b/c unbounded concurrency is :(
-	_ = <-pf.sem
+	<-pf.sem
 	defer func() { pf.sem <- struct{}{} }()
 
 	select {

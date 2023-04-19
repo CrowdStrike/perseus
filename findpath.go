@@ -130,10 +130,10 @@ func printTreeTo(w io.Writer, paths [][]module.Version) {
 	for _, p := range paths {
 		for indent, pp := range p {
 			if indent > 0 {
-				io.WriteString(w, fmt.Sprintf("%s-> ", strings.Repeat(" ", 3*(indent-1))))
+				_, _ = io.WriteString(w, fmt.Sprintf("%s-> ", strings.Repeat(" ", 3*(indent-1))))
 			}
-			io.WriteString(w, pp.String())
-			io.WriteString(w, "\n")
+			_, _ = io.WriteString(w, pp.String())
+			_, _ = io.WriteString(w, "\n")
 		}
 	}
 }
@@ -144,9 +144,9 @@ func printTreeTo(w io.Writer, paths [][]module.Version) {
 func printJSONLinesTo(w io.Writer, paths [][]module.Version) {
 	for _, p := range paths {
 		for _, pp := range p {
-			io.WriteString(w, fmt.Sprintf("{%q:", pp))
+			_, _ = io.WriteString(w, fmt.Sprintf("{%q:", pp))
 		}
-		io.WriteString(w, fmt.Sprintf("{}%s\n", strings.Repeat("}", len(p))))
+		_, _ = io.WriteString(w, fmt.Sprintf("{}%s\n", strings.Repeat("}", len(p))))
 	}
 }
 
