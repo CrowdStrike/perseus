@@ -60,14 +60,14 @@ func (pf *pathFinder) findPathsBetween(ctx context.Context, from, to module.Vers
 			close(results)
 			close(pf.sem)
 		}()
-		pf.xxx(ctx, []module.Version{from}, to, 1, results)
+		pf.recursiveSearch(ctx, []module.Version{from}, to, 1, results)
 	}()
 	return results
 }
 
-// xxx recursively queries the Perseus graph searching for dependencies between the last element of chain
-// and to.  If a dependency is found, a result is produced to rc.
-func (pf *pathFinder) xxx(ctx context.Context, chain []module.Version, to module.Version, depth int, rc chan pathFinderResult) {
+// recursiveSearch recursively queries the Perseus graph searching for dependencies between the last
+// element of [chain] and [to].  If a dependency is found or an error occurs, a result is produced to [rc].
+func (pf *pathFinder) recursiveSearch(ctx context.Context, chain []module.Version, to module.Version, depth int, rc chan pathFinderResult) {
 	// grab the semaphore b/c unbounded concurrency is :(
 	<-pf.sem
 	defer func() { pf.sem <- struct{}{} }()
@@ -110,7 +110,7 @@ func (pf *pathFinder) xxx(ctx context.Context, chain []module.Version, to module
 					// data sharing == bad
 					cc := make([]module.Version, len(chain))
 					copy(cc, chain)
-					pf.xxx(ctx, append(cc, c), to, depth+1, rc)
+					pf.recursiveSearch(ctx, append(cc, c), to, depth+1, rc)
 				}(c)
 			}
 		}
