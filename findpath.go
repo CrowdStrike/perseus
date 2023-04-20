@@ -31,6 +31,7 @@ perseus find-paths github.com/example/foo google.golang.org/grpc@v1.43.0 --all
 # and output the results as line-delimited JSON
 perseus find-paths github.com/example/foo@v1.0.0 google.golang.org/grpc --all --json`
 
+// createFindPathsCommand creates and returns a *cobra.Command that implements the 'find-paths' CLI command
 func createFindPathsCommand() *cobra.Command {
 	cmd := cobra.Command{
 		Use:          "find-paths from_module[@version] to_module[@version]",
@@ -50,6 +51,7 @@ func createFindPathsCommand() *cobra.Command {
 	return &cmd
 }
 
+// runFindPathsCmd implements the logic behind the 'find-paths' CLI sub-command
 func runFindPathsCommand(cmd *cobra.Command, args []string) (err error) {
 	conf, err := parseSharedQueryOpts(cmd, args)
 	if err != nil {
@@ -78,11 +80,11 @@ func runFindPathsCommand(cmd *cobra.Command, args []string) (err error) {
 
 	// validate the 'from' and 'to' modules, defaulting to the highest known release for 'from'
 	// if no version is specified
-	from, err := parseModuleArg(ctx, ps, args[0], true, updateSpinner)
+	from, err := parseModuleArg(ctx, args[0], ps, true, updateSpinner)
 	if err != nil {
 		return err
 	}
-	to, err := parseModuleArg(ctx, ps, args[1], false, updateSpinner)
+	to, err := parseModuleArg(ctx, args[1], ps, false, updateSpinner)
 	if err != nil {
 		return err
 	}
@@ -152,10 +154,10 @@ func printJSONLinesTo(w io.Writer, paths [][]module.Version) {
 
 // parseModuleArg parses the provided string as a Go module path, optionally with a version, and returns
 // the parsed result.  If no version is specified, the highest known version is used.
-func parseModuleArg(ctx context.Context, c perseusapi.PerseusServiceClient, s string, findLatest bool, status func(string)) (module.Version, error) {
+func parseModuleArg(ctx context.Context, arg string, client perseusapi.PerseusServiceClient, findLatest bool, status func(string)) (module.Version, error) {
 	defer status("")
 	var m module.Version
-	toks := strings.Split(s, "@")
+	toks := strings.Split(arg, "@")
 	switch len(toks) {
 	case 1:
 		m.Path = toks[0]
@@ -163,14 +165,14 @@ func parseModuleArg(ctx context.Context, c perseusapi.PerseusServiceClient, s st
 		m.Path = toks[0]
 		m.Version = toks[1]
 	default:
-		return module.Version{}, fmt.Errorf("Invalid 'from' module path/version %q", s)
+		return module.Version{}, fmt.Errorf("Invalid 'from' module path/version %q", arg)
 	}
 	if err := module.CheckPath(m.Path); err != nil {
 		return module.Version{}, fmt.Errorf("The specified module name %q is invalid: %w", m, err)
 	}
 	if m.Version == "" && findLatest {
 		status("determining current version for " + m.String())
-		v, err := lookupLatestModuleVersion(ctx, c, m.Path)
+		v, err := lookupLatestModuleVersion(ctx, client, m.Path)
 		if err != nil {
 			return module.Version{}, fmt.Errorf("Unable to determine the current version for %q: %w", m.Path, err)
 		}
