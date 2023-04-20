@@ -16,6 +16,7 @@ func main() {
 	rootCommand.AddCommand(server.CreateServerCommand(debugLog))
 	rootCommand.AddCommand(createUpdateCommand())
 	rootCommand.AddCommand(createQueryCommand())
+	rootCommand.AddCommand(createFindPathsCommand())
 	rootCommand.AddCommand(versionCommand)
 
 	if err := rootCommand.Execute(); err != nil {

@@ -90,7 +90,7 @@ func createQueryCommand() *cobra.Command {
 
 	descendantsCmd := cobra.Command{
 		Use:          "descendants module[@version]",
-		Aliases:      []string{"d", "dependants"},
+		Aliases:      []string{"d", "dependants", "dependents"},
 		Short:        "Outputs the list of modules that depend on the specified module",
 		RunE:         runQueryModuleGraphCmd,
 		SilenceUsage: true,
@@ -127,7 +127,7 @@ func runListModulesCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
 	}
 
-	updateSpinner, stopSpinner := startSpinner(" ")
+	updateSpinner, stopSpinner := startSpinner()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -166,7 +166,7 @@ func runListModuleVersionsCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
 	}
 
-	updateSpinner, stopSpinner := startSpinner(" ")
+	updateSpinner, stopSpinner := startSpinner()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -267,7 +267,7 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		dir = perseusapi.DependencyDirection_dependents
 	}
 
-	updateSpinner, stopSpinner := startSpinner(" ")
+	updateSpinner, stopSpinner := startSpinner()
 	tree, err := walkDependencies(ctx, ps, rootMod, dir, 1, maxDepth, updateSpinner)
 	if err != nil {
 		return err
@@ -658,7 +658,7 @@ func xor(vs ...bool) bool {
 
 // startSpinner initializes and starts a "spinner" for the console and returns
 // a function for updating the spinner's message and another to stop it.
-func startSpinner(msg string) (update func(string), done func()) {
+func startSpinner() (update func(string), done func()) {
 	update = func(string) {}
 	done = func() {}
 
@@ -667,7 +667,7 @@ func startSpinner(msg string) (update func(string), done func()) {
 		spinner, _ := yacspin.New(yacspin.Config{
 			CharSet:         yacspin.CharSets[11],
 			Frequency:       300 * time.Millisecond,
-			Message:         msg,
+			Message:         "",
 			Prefix:          "querying the graph ",
 			Suffix:          " ",
 			SuffixAutoColon: false,
