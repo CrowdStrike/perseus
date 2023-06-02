@@ -153,6 +153,7 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 		}
 		k := fmt.Sprintf("%d-%d", versionIDs[0], vids[0])
 		if _, found := uniqueDeps[k]; found {
+			p.log("skipping duplicate dependency", "dependency", d.ModuleID+"@"+d.SemVer)
 			continue
 		}
 		cmd = cmd.Values(versionIDs[0], vids[0])
