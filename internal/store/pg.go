@@ -137,6 +137,10 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 	cmd := psql.
 		Insert("module_dependency").
 		Columns("dependent_id", "dependee_id")
+	// it's possible for a given dependency to appear in a module's go.mod more than once if it hasn't
+	// been 'go mod tidy'-ed, so we skip any duplicates here to avoid updating the same row in the
+	// database multiple times in a single command
+	uniqueDeps := map[string]struct{}{}
 	for _, d := range deps {
 		p.log("saving dependency", "moduleName", d.ModuleID, "version", d.SemVer)
 		pkey, err := writeModule(ctx, txn, d.ModuleID, "")
@@ -147,7 +151,13 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 		if err != nil {
 			return err
 		}
+		k := fmt.Sprintf("%d-%d", versionIDs[0], vids[0])
+		if _, found := uniqueDeps[k]; found {
+			p.log("skipping duplicate dependency", "dependency", d.ModuleID+"@"+d.SemVer)
+			continue
+		}
 		cmd = cmd.Values(versionIDs[0], vids[0])
+		uniqueDeps[k] = struct{}{}
 	}
 	sql, args, err := cmd.Suffix("ON CONFLICT (dependent_id, dependee_id) DO UPDATE SET dependent_id = EXCLUDED.dependent_id").ToSql()
 	p.log("upsert module dependencies", "sql", sql, "args", args, "err", err)
