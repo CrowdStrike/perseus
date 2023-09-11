@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/go-git/go-git/v5 v5.8.1
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.17.1
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0
 	github.com/jackc/pgx/v4 v4.18.1
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/mattn/go-isatty v0.0.19
@@ -74,9 +74,9 @@ require (
 	github.com/jackc/pgtype v1.14.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
-	golang.org/x/crypto v0.12.0 // indirect
-	golang.org/x/net v0.14.0 // indirect
+	golang.org/x/crypto v0.13.0 // indirect
+	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sync v0.3.0
-	golang.org/x/sys v0.11.0 // indirect
-	golang.org/x/text v0.12.0 // indirect
+	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/text v0.13.0 // indirect
 )
