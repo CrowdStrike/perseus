@@ -92,7 +92,7 @@ func (pf *pathFinder) recursiveSearch(ctx context.Context, chain []module.Versio
 				return
 			default:
 				if d.Module.Path == to.Path && (to.Version == "" || d.Module.Version == to.Version) {
-					debugLog("found path", "chain", chain, "to", d.Module)
+					logger.Debug("found path", "chain", chain, "to", d.Module)
 					// data sharing == bad
 					cc := make([]module.Version, len(chain))
 					copy(cc, chain)

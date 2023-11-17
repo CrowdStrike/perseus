@@ -22,8 +22,6 @@ const (
 
 var (
 	columnsModules = []string{"id", "name", "description"}
-	//columnsModuleVersions = []string{"id", "module_id", "version"}
-	//colummsModuleDependencies = []string{"dependent_id", "dependee_id"}
 
 	psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 )
@@ -32,7 +30,7 @@ var (
 // database.
 type PostgresClient struct {
 	db  *sqlx.DB
-	log func(string, ...any)
+	log Logger
 }
 
 // ensure the PG client satisfies the Store interface
@@ -59,7 +57,7 @@ func NewPostgresClient(ctx context.Context, url string, opts ...PGOption) (*Post
 		}
 	}
 	if p.log == nil {
-		p.log = func(string, ...any) {}
+		p.log = nopLogger{}
 	}
 	return p, nil
 }
@@ -117,12 +115,12 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 			err = txn.Commit()
 		} else {
 			if e2 := txn.Rollback(); e2 != nil {
-				p.log("error rolling back transaction after error", "error", err, "rollbackError", e2)
+				p.log.Error(e2, "error rolling back transaction after error")
 			}
 		}
 	}()
 
-	p.log("saving module", "moduleName", mod.ModuleID, "version", mod.SemVer)
+	p.log.Debug("saving module", "moduleName", mod.ModuleID, "version", mod.SemVer)
 	pkey, err := writeModule(ctx, txn, mod.ModuleID, "")
 	if err != nil {
 		return err
@@ -142,7 +140,7 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 	// database multiple times in a single command
 	uniqueDeps := map[string]struct{}{}
 	for _, d := range deps {
-		p.log("saving dependency", "moduleName", d.ModuleID, "version", d.SemVer)
+		p.log.Debug("saving dependency", "moduleName", d.ModuleID, "version", d.SemVer)
 		pkey, err := writeModule(ctx, txn, d.ModuleID, "")
 		if err != nil {
 			return err
@@ -153,17 +151,17 @@ func (p *PostgresClient) SaveModuleDependencies(ctx context.Context, mod Version
 		}
 		k := fmt.Sprintf("%d-%d", versionIDs[0], vids[0])
 		if _, found := uniqueDeps[k]; found {
-			p.log("skipping duplicate dependency", "dependency", d.ModuleID+"@"+d.SemVer)
+			p.log.Debug("skipping duplicate dependency", "dependency", d.ModuleID+"@"+d.SemVer)
 			continue
 		}
 		cmd = cmd.Values(versionIDs[0], vids[0])
 		uniqueDeps[k] = struct{}{}
 	}
 	sql, args, err := cmd.Suffix("ON CONFLICT (dependent_id, dependee_id) DO UPDATE SET dependent_id = EXCLUDED.dependent_id").ToSql()
-	p.log("upsert module dependencies", "sql", sql, "args", args, "err", err)
 	if err != nil {
 		return fmt.Errorf("error constructing SQL query: %w", err)
 	}
+	p.log.Debug("upsert module dependencies", "sql", sql, "args", args)
 	if _, err = txn.ExecContext(ctx, sql, args...); err != nil {
 		return fmt.Errorf("database error saving new module dependency: %w", err)
 	}
@@ -282,7 +280,7 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, query ModuleVe
 		SemVer   string `db:"version"`
 	}
 	var rows []queryResult
-	p.log("QueryModuleVersions", "sql", sql, "args", args)
+	p.log.Debug("QueryModuleVersions", "sql", sql, "args", args)
 	err = p.db.SelectContext(ctx, &rows, sql, args...)
 	if err != nil {
 		return nil, "", err
@@ -444,7 +442,7 @@ func writeModuleVersions(ctx context.Context, db database, moduleID int32, versi
 
 // getDependx is a shared query for dependency gathering in either direction,
 // dependent on the joinType.
-func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType string, pageToken string, count int, log func(string, ...any)) ([]Version, string, error) {
+func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType string, pageToken string, count int, log Logger) ([]Version, string, error) {
 	pageTokenKey := "moduleversions:" + module + version + ":" + joinType
 	offset := 0
 	if pageToken != "" {
@@ -488,7 +486,7 @@ func getDependx(ctx context.Context, db *sqlx.DB, module, version, joinType stri
 	if err != nil {
 		return nil, "", err
 	}
-	log("getDependx()", "sql", sql, "args", args)
+	log.Debug("getDependx()", "sql", sql, "args", args)
 	var dependents []Version
 	err = db.SelectContext(ctx, &dependents, sql, args...)
 	if err != nil {

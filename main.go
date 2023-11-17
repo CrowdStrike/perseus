@@ -11,9 +11,11 @@ import (
 )
 
 func main() {
-	rootCommand.PersistentFlags().BoolVarP(&debugMode, "debug", "x", os.Getenv("LOG_VERBOSITY") == "debug", "enable verbose logging")
+	// we pass the debugMode field on the package-level logLevel variable here to simplify the CLI
+	// argument management.
+	rootCommand.PersistentFlags().BoolVarP(&(logLevel.debugMode), "debug", "x", os.Getenv("LOG_VERBOSITY") == "debug", "enable verbose logging")
 
-	rootCommand.AddCommand(server.CreateServerCommand(debugLog))
+	rootCommand.AddCommand(server.CreateServerCommand(logger))
 	rootCommand.AddCommand(createUpdateCommand())
 	rootCommand.AddCommand(createQueryCommand())
 	rootCommand.AddCommand(createFindPathsCommand())

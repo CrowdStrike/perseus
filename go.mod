@@ -1,6 +1,6 @@
 module github.com/CrowdStrike/perseus
 
-go 1.18
+go 1.21
 
 require (
 	github.com/Masterminds/squirrel v1.5.4
@@ -16,7 +16,6 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.4
 	github.com/theckman/yacspin v0.13.12
-	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 	golang.org/x/mod v0.14.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20231106174013-bbf56f31fb17
 	google.golang.org/grpc v1.59.0

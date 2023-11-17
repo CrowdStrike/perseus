@@ -23,17 +23,35 @@ import (
 	"github.com/CrowdStrike/perseus/perseusapi"
 )
 
-// LogFunc defines a callback function for logging.  This type is defined here so that the server
-// implementation is not tied to any specified logging library
-type LogFunc func(string, ...any)
+// Logger defines the required behavior for the service's logger.  This type is defined here so that the server
+// implementation is not tied to any specified logging library.
+type Logger interface {
+	// Info generates a log entry at INFO level with the specified message and key/value attributes
+	Info(msg string, kvs ...any)
+	// Debug generates a log entry at DEBUG level with the specified message and key/value attributes
+	Debug(msg string, kvs ...any)
+	// Error generates a log entry at ERROR level with the specified error, message, and key/value attributes
+	Error(err error, msg string, kvs ...any)
+}
 
-// debugLog is the logging function for the server.
-var debugLog LogFunc = func(string, ...any) { /* no-op by default */ }
+// nopLogger is a [Logger] that does nothing.  This is used as a fallback/default if [CreateServerCommand]
+// is passed a nil.
+type nopLogger struct{}
+
+func (nopLogger) Info(string, ...any) { /* no-op */ }
+
+func (nopLogger) Debug(string, ...any) { /* no-op */ }
+
+func (nopLogger) Error(error, string, ...any) { /* no-op */ }
+
+// log is the logging implementation for the server.  The default is a no-op logger, potentially
+// overridden by [CreateServerCommand]
+var log Logger = nopLogger{}
 
 // CreateServerCommand initializes and returns a *cobra.Command that implements the 'server' CLI sub-command
-func CreateServerCommand(logFn LogFunc) *cobra.Command {
-	if logFn != nil {
-		debugLog = logFn
+func CreateServerCommand(logger Logger) *cobra.Command {
+	if logger != nil {
+		log = logger
 	}
 
 	cmd := cobra.Command{
@@ -79,7 +97,7 @@ func runServer(opts ...serverOption) error {
 		conf.healthzTimeout = 300 * time.Millisecond
 	}
 
-	debugLog("starting the server")
+	log.Debug("starting the server")
 	// create the root listener for cmux
 	lis, err := net.Listen("tcp", conf.listenAddr)
 	if err != nil {
@@ -87,7 +105,7 @@ func runServer(opts ...serverOption) error {
 	}
 	defer func() {
 		if err := lis.Close(); err != nil {
-			debugLog("unexpected error closing TCP listener", "err", err)
+			log.Error(err, "unexpected error closing TCP listener")
 		}
 	}()
 
@@ -96,13 +114,13 @@ func runServer(opts ...serverOption) error {
 	grpcLis := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
 	defer func() {
 		if err := grpcLis.Close(); err != nil {
-			debugLog("unexpected error closing gRPC mux listener", "err", err)
+			log.Error(err, "unexpected error closing gRPC mux listener")
 		}
 	}()
 	httpLis := mux.Match(cmux.HTTP1Fast(http.MethodPatch))
 	defer func() {
 		if err := httpLis.Close(); err != nil {
-			debugLog("unexpected error closing HTTP mux listener", "err", err)
+			log.Error(err, "unexpected error closing HTTP mux listener")
 		}
 	}()
 
@@ -111,11 +129,11 @@ func runServer(opts ...serverOption) error {
 
 	// connect to the database
 	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s", url.PathEscape(conf.dbUser), url.PathEscape(conf.dbPwd), url.PathEscape(conf.dbAddr), url.PathEscape(conf.dbName))
-	db, err := store.NewPostgresClient(ctx, connStr, store.WithLog(debugLog))
+	db, err := store.NewPostgresClient(ctx, connStr, store.WithLog(log))
 	if err != nil {
 		return fmt.Errorf("could not connect to the database: %w", err)
 	}
-	debugLog("connected to the database", "addr", conf.dbAddr, "database", conf.dbName, "user", conf.dbUser)
+	log.Debug("connected to the database", "addr", conf.dbAddr, "database", conf.dbName, "user", conf.dbUser)
 
 	// spin up gRPC server
 	grpcOpts := []grpc.ServerOption{
@@ -133,13 +151,13 @@ func runServer(opts ...serverOption) error {
 	// . use x/sync/errgroup so we can stop everything at once via the context
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		debugLog("serving gRPC")
-		defer debugLog("gRPC server closed")
+		log.Debug("serving gRPC")
+		defer log.Debug("gRPC server closed")
 		return grpcSrv.Serve(grpcLis)
 	})
 	eg.Go(func() error {
-		debugLog("serving HTTP/REST")
-		defer debugLog("HTTP/REST server closed")
+		log.Debug("serving HTTP/REST")
+		defer log.Debug("HTTP/REST server closed")
 		return httpSrv.Serve(httpLis)
 	})
 
@@ -158,9 +176,9 @@ func runServer(opts ...serverOption) error {
 			case sig := <-sigs:
 				switch sig {
 				case syscall.SIGHUP:
-					debugLog("Got SIGNUP signal, TODO - reload config")
+					log.Debug("Got SIGHUP signal, TODO - reload config")
 				default:
-					debugLog("Got stop signal, shutting down", "signal", sig.String())
+					log.Debug("Got stop signal, shutting down", "signal", sig.String())
 					return nil
 				}
 			case <-ctx.Done():
@@ -171,8 +189,8 @@ func runServer(opts ...serverOption) error {
 
 	// spin up the cmux
 	go func() { _ = mux.Serve() }()
-	debugLog("Server listening", "addr", conf.listenAddr)
-	defer debugLog("Server exited")
+	log.Info("Server listening", "addr", conf.listenAddr)
+	defer log.Info("Server exited")
 	// wait for shutdown
 	if err := eg.Wait(); err != nil && err != context.Canceled {
 		return err
