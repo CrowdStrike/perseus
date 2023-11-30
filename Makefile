@@ -66,6 +66,14 @@ check-goreleaser-config:
 snapshot: check-goreleaser-install
 	@goreleaser release --snapshot --rm-dist --skip-publish
 
+.PHONY: update-changelog
+update-changelog: check-git-cliff-install
+ifeq ("${NEXT_VERSION}", "")
+	$(error Must specify the next version via $$NEXT_VERSION)
+else
+	git cliff --unreleased --tag ${NEXT_VERSION} --prepend CHANGELOG.md
+endif
+
 .PHONY: check-buf-install
 check-buf-install:
 ifeq ("$(shell command -v buf)", "")
@@ -82,4 +90,10 @@ endif
 check-goreleaser-install:
 ifeq ("$(shell command -v goreleaser)", "")
 	$(error goreleaser was not found.  Please install it using the method of your choice. (https://goreleaser.com/install))
+endif
+
+.PHONY: check-git-cliff-install
+check-git-cliff-install:
+ifeq ("$(shell command -v git-cliff)", "")
+	$(error git-cliff was not found.  Please install it using the method of your choice. (https://git-cliff.org/docs/installation/))
 endif

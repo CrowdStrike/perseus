@@ -144,7 +144,7 @@ func getModuleInfoFromDir(dir string) (moduleInfo, error) {
 	if err != nil {
 		return moduleInfo{}, err
 	}
-	if debugMode {
+	if logLevel.debugMode {
 		fmt.Printf("Processing Go module %s@%s (path=%q)...\nDirect Dependencies:\n", info.Name, moduleVersion, moduleDir)
 		for _, d := range info.Deps {
 			fmt.Printf("\t%s\n", d)
@@ -179,7 +179,7 @@ func getModuleInfoFromProxy(modulePath string) (moduleInfo, error) {
 	if err != nil {
 		return moduleInfo{}, err
 	}
-	if debugMode {
+	if logLevel.debugMode {
 		fmt.Printf("Processing Go module %s@%s...\nDirect Dependencies:\n", info.Name, info.Version)
 		for _, d := range info.Deps {
 			fmt.Printf("\t%s\n", d)

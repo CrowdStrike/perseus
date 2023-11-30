@@ -178,15 +178,15 @@ func runListModuleVersionsCmd(cmd *cobra.Command, args []string) error {
 
 	versionFilter, err := cmd.Flags().GetString("versions")
 	if err != nil {
-		debugLog("error reading 'version' CLI flag", "err", err)
+		logger.Error(err, "unable to read 'version' CLI flag")
 	}
 	latest, err := cmd.Flags().GetBool("latest")
 	if err != nil {
-		debugLog("error reading 'latest' CLI flag", "err", err)
+		logger.Error(err, "unable to read 'latest' CLI flag")
 	}
 	includePrerelease, err := cmd.Flags().GetBool("include-prerelease")
 	if err != nil {
-		debugLog("error reading 'include-prerelease' CLI flag", "err", err)
+		logger.Error(err, "unable to read 'include-prerelease' CLI flag")
 	}
 	results, err := listModuleVersions(ctx, ps, listModuleVersionsRequest{
 		modulePattern:     args[0],
@@ -200,7 +200,7 @@ func runListModuleVersionsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(results) == 0 {
-		debugLog("found no matching versions for matching modules", "filter", versionFilter, "module", args[0])
+		logger.Debug("found no matching versions for matching modules", "filter", versionFilter, "module", args[0])
 		return nil
 	}
 

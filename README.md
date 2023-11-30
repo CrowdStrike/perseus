@@ -25,6 +25,8 @@ view that shows what other packages depend on your code.  The `go` tool won't sh
 on you, though.  The `pkg.go.dev` site can only show things that it knows about, so it won't help for
 private modules, and it doesn't show you which versions of those other packages depend on your code.
 
+See [CHANGELOG.md](./CHANGELOG.md) for a detailed history of changes.
+
 ## Existing Tooling
 
 Unfortunately, the `go` CLI commands, the `pkg.go.dev` site, and OSS tools like [`goda`](https://github.com/loov/goda)

@@ -35,7 +35,7 @@ func newGRPCServer(store store.Store) perseusapi.PerseusServiceServer {
 }
 
 func (s *grpcServer) CreateModule(ctx context.Context, req *perseusapi.CreateModuleRequest) (*perseusapi.CreateModuleResponse, error) {
-	debugLog("CreateModule() called", "module", req.GetModule().GetName(), "versions", req.GetModule().GetVersions())
+	log.Debug("CreateModule() called", "module", req.GetModule().GetName(), "versions", req.GetModule().GetVersions())
 
 	m := req.GetModule()
 	if m.GetName() == "" {
@@ -61,27 +61,25 @@ func (s *grpcServer) CreateModule(ctx context.Context, req *perseusapi.CreateMod
 		}
 	}
 
-	err := s.store.SaveModule(ctx, m.GetName(), "", m.GetVersions()...)
-	if err != nil {
-		debugLog("unable to save module", "module", m.GetName(), "err", err)
+	if err := s.store.SaveModule(ctx, m.GetName(), "", m.GetVersions()...); err != nil {
+		log.Error(err, "error saving new module", "module", m.GetName(), "versions", m.GetVersions())
 		return nil, status.Errorf(codes.Internal, fmt.Sprintf("unable to save module %q: a database operation failed", m.GetName()))
 	}
 
-	resp := perseusapi.CreateModuleResponse{
+	return &perseusapi.CreateModuleResponse{
 		Module: req.GetModule(),
-	}
-	return &resp, nil
+	}, nil
 }
 
 func (s *grpcServer) ListModules(ctx context.Context, req *perseusapi.ListModulesRequest) (*perseusapi.ListModulesResponse, error) {
-	debugLog("ListModules() called", "args", req.String())
+	log.Debug("ListModules() called", "args", req.String())
 
 	mods, pageToken, err := s.store.QueryModules(ctx, req.Filter, req.PageToken, int(req.PageSize))
 	if err != nil {
-		debugLog("unable to query modules", "filter", req.Filter, "err", err)
+		log.Error(err, "error querying the database", "filter", req.Filter, "pageToken", req.PageToken, "pageSize", req.PageSize)
 		return nil, status.Errorf(codes.Internal, "Unable to query the database")
 	}
-	resp := perseusapi.ListModulesResponse{
+	resp := &perseusapi.ListModulesResponse{
 		NextPageToken: pageToken,
 	}
 	for _, m := range mods {
@@ -90,11 +88,11 @@ func (s *grpcServer) ListModules(ctx context.Context, req *perseusapi.ListModule
 		}
 		resp.Modules = append(resp.Modules, mod)
 	}
-	return &resp, nil
+	return resp, nil
 }
 
 func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.ListModuleVersionsRequest) (*perseusapi.ListModuleVersionsResponse, error) {
-	debugLog("ListModuleVersions() called", "req", req)
+	log.Debug("ListModuleVersions() called", "req", req)
 
 	mod, vfilter, vopt, pageToken := req.GetModuleName(), req.GetVersionFilter(), req.GetVersionOption(), req.GetPageToken()
 	if mod == "" {
@@ -108,7 +106,7 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 		return nil, status.Errorf(codes.InvalidArgument, "The version option cannot be 'none'")
 	case perseusapi.ModuleVersionOption_latest:
 		if pageToken != "" {
-			return nil, status.Errorf(codes.InvalidArgument, "Paging is only support when the version option is 'all'")
+			return nil, status.Errorf(codes.InvalidArgument, "Paging is only supported when the version option is 'all'")
 		}
 	default:
 		// all good
@@ -127,7 +125,15 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 		Count:             int(req.GetPageSize()),
 	})
 	if err != nil {
-		debugLog("unable to query module versions", "moduleFilter", mod, "versionFilter", vfilter, "err", err)
+		kvs := []any{
+			"moduleFilter", mod,
+			"versionFilter", vfilter,
+			"includePrerelease", req.IncludePrerelease,
+			"latestOnly", req.VersionOption == perseusapi.ModuleVersionOption_latest,
+			"pageToken", req.GetPageToken(),
+			"pageSize", req.GetPageSize(),
+		}
+		log.Error(err, "unable to query module versions", kvs...)
 		return nil, status.Errorf(codes.Internal, "Unable to retrieve version list for module %s: a database operation failed", req.GetModuleName())
 	}
 
@@ -151,7 +157,7 @@ func (s *grpcServer) ListModuleVersions(ctx context.Context, req *perseusapi.Lis
 }
 
 func (s *grpcServer) QueryDependencies(ctx context.Context, req *perseusapi.QueryDependenciesRequest) (*perseusapi.QueryDependenciesResponse, error) {
-	debugLog("QueryDependencies() called", "request", req.String())
+	log.Debug("QueryDependencies() called", "request", req.String())
 
 	modName, modVer := req.GetModuleName(), req.GetVersion()
 	if err := module.Check(modName, modVer); err != nil {
@@ -169,7 +175,14 @@ func (s *grpcServer) QueryDependencies(ctx context.Context, req *perseusapi.Quer
 		deps, pageToken, err = s.store.GetDependents(ctx, modName, strings.TrimPrefix(modVer, "v"), req.GetPageToken(), int(req.GetPageSize()))
 	}
 	if err != nil {
-		debugLog("unable to query module dependencies", "module", modName, "version", modVer, "direction", req.GetDirection().String(), "err", err)
+		kvs := []any{
+			"module", modName,
+			"version", modVer,
+			"direction", req.GetDirection().String(),
+			"pageToken", req.GetPageToken(),
+			"pageSize", req.GetPageSize(),
+		}
+		log.Error(err, "unable to query module dependencies", kvs...)
 		return nil, status.Errorf(codes.Internal, "Unable to query the graph: a database operation failed")
 	}
 	resp := perseusapi.QueryDependenciesResponse{
@@ -185,7 +198,7 @@ func (s *grpcServer) QueryDependencies(ctx context.Context, req *perseusapi.Quer
 }
 
 func (s *grpcServer) UpdateDependencies(ctx context.Context, req *perseusapi.UpdateDependenciesRequest) (*perseusapi.UpdateDependenciesResponse, error) {
-	debugLog("UpdateDependencies() called", "args", req)
+	log.Debug("UpdateDependencies() called", "args", req)
 
 	modName, modVer := req.GetModuleName(), req.GetVersion()
 	if err := module.Check(modName, modVer); err != nil {
@@ -211,7 +224,7 @@ func (s *grpcServer) UpdateDependencies(ctx context.Context, req *perseusapi.Upd
 	}
 
 	if err := s.store.SaveModuleDependencies(ctx, mod, deps...); err != nil {
-		debugLog("unable to save module dependencies", "module", mod, "err", err)
+		log.Error(err, "unable to save module dependencies", "module", mod, "dependencies", deps)
 		return nil, status.Errorf(codes.Internal, "Unable to update the graph: database operation failed")
 	}
 

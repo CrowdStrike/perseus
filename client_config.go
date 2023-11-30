@@ -110,7 +110,7 @@ func (conf *clientConfig) dialServer() (client perseusapi.PerseusServiceClient, 
 	} else {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(nil)))
 	}
-	debugLog("connecting to Perseus server", "addr", conf.serverAddr, "useTLS", !conf.disableTLS)
+	logger.Debug("connecting to Perseus server", "addr", conf.serverAddr, "useTLS", !conf.disableTLS)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	conn, err := grpc.DialContext(ctx, conf.serverAddr, dialOpts...)
