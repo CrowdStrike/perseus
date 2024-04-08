@@ -3,15 +3,17 @@ run:
   modules-download-mode: readonly
   deadline: 10m
   timeout: 10m
-  skip-files:
-    - ".*\\.pb.*\\.go"
-    - ".*_test\\.go"
 
 # output configuration options
 output:
   print-issued-lines: false
   sort-results: true
   uniq-by-line: false
+
+issues:
+  exclude-files:
+    - ".*\\.pb.*\\.go"
+    - ".*_test\\.go"
 
 linters:
   # these are disabled by default so turn them on
