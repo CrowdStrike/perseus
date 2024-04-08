@@ -113,7 +113,7 @@ func (conf *clientConfig) dialServer() (client perseusapi.PerseusServiceClient, 
 	logger.Debug("connecting to Perseus server", "addr", conf.serverAddr, "useTLS", !conf.disableTLS)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, conf.serverAddr, dialOpts...)
+	conn, err := grpc.DialContext(ctx, conf.serverAddr, dialOpts...) //nolint: staticcheck // we specifically want WithBlock(), which is ignored by grpc.NewClient()
 	if err != nil {
 		return nil, err
 	}
