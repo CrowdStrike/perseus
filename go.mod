@@ -17,8 +17,8 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/theckman/yacspin v0.13.12
 	golang.org/x/mod v0.17.0
-	google.golang.org/genproto/googleapis/api v0.0.0-20240125205218-1f4bbc51befe
-	google.golang.org/grpc v1.62.1
+	google.golang.org/genproto/googleapis/api v0.0.0-20240227224415-6ceb2ff114de
+	google.golang.org/grpc v1.63.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.33.0
 )
@@ -53,13 +53,12 @@ require (
 	github.com/skeema/knownhosts v1.2.2 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	golang.org/x/tools v0.13.0 // indirect
-	google.golang.org/genproto v0.0.0-20240123012728-ef4313101c80 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240125205218-1f4bbc51befe // indirect
+	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240227224415-6ceb2ff114de // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
 
 require (
-	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.14.3 // indirect
