@@ -8,7 +8,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.1
 	github.com/jackc/pgx/v4 v4.18.3
-	github.com/jmoiron/sqlx v1.3.5
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/prometheus/client_golang v1.19.0
 	github.com/soheilhy/cmux v0.1.5
