@@ -1,20 +1,15 @@
 package main
 
 import (
-	"context"
-	"fmt"
+	"crypto/tls"
 	"os"
 	"strconv"
-	"time"
 
+	"connectrpc.com/connect"
+	"github.com/bufbuild/httplb"
 	"github.com/spf13/pflag"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 
-	"github.com/CrowdStrike/perseus/perseusapi"
+	"github.com/CrowdStrike/perseus/perseusapi/perseusapiconnect"
 )
 
 // package variables to hold CLI flag values
@@ -84,40 +79,20 @@ func readClientConfigFlags(fset *pflag.FlagSet) []clientOption {
 	return opts
 }
 
-func (conf *clientConfig) dialServer() (client perseusapi.PerseusServiceClient, err error) {
-	// translate RPC errors to human-friendly ones on return
-	defer func() {
-		switch err {
-		case context.DeadlineExceeded:
-			err = fmt.Errorf("timed out trying to connect to the Perseus server")
-		default:
-			if err != nil {
-				switch status.Code(err) {
-				case codes.Unavailable:
-					err = fmt.Errorf("unable to connect to the Perseus server")
-				default:
-				}
-			}
+func (conf *clientConfig) getClient() (client perseusapiconnect.PerseusServiceClient) {
+	opts := []httplb.ClientOption{}
+	if !conf.disableTLS {
+		tlsc := tls.Config{
+			MinVersion: tls.VersionTLS13,
 		}
-	}()
-
-	// setup gRPC connection options and connect
-	dialOpts := []grpc.DialOption{
-		grpc.WithBlock(),
-	}
-	if conf.disableTLS {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	} else {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(nil)))
-	}
-	logger.Debug("connecting to Perseus server", "addr", conf.serverAddr, "useTLS", !conf.disableTLS)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	conn, err := grpc.DialContext(ctx, conf.serverAddr, dialOpts...) //nolint: staticcheck // we specifically want WithBlock(), which is ignored by grpc.NewClient()
-	if err != nil {
-		return nil, err
+		opts = append(opts, httplb.WithTLSConfig(&tlsc, 0))
 	}
 
-	// create and return the client
-	return perseusapi.NewPerseusServiceClient(conn), nil
+	// we include WithGRPC() so that the CLI can hit an existing gRPC-based server instance
+	// - this may be removed at some point in the future
+	cc := perseusapiconnect.NewPerseusServiceClient(
+		httplb.NewClient(opts...),
+		conf.serverAddr,
+		connect.WithGRPC())
+	return cc
 }

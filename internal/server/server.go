@@ -12,15 +12,19 @@ import (
 	"syscall"
 	"time"
 
-	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
+	"connectrpc.com/vanguard"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/soheilhy/cmux"
 	"github.com/spf13/cobra"
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/sdk/metric"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 
 	"github.com/CrowdStrike/perseus/internal/store"
-	"github.com/CrowdStrike/perseus/perseusapi"
+	"github.com/CrowdStrike/perseus/perseusapi/perseusapiconnect"
 )
 
 // Logger defines the required behavior for the service's logger.  This type is defined here so that the server
@@ -75,7 +79,7 @@ func runServerCmd(cmd *cobra.Command, _ []string) error {
 	opts = append(opts, readServerConfigEnv()...)
 	opts = append(opts, readServerConfigFlags(cmd.Flags())...)
 
-	if err := runServer(opts...); err != nil && err != cmux.ErrListenerClosed {
+	if err := runServer(opts...); err != nil {
 		return err
 	}
 	return nil
@@ -98,7 +102,7 @@ func runServer(opts ...serverOption) error {
 	}
 
 	log.Debug("starting the server")
-	// create the root listener for cmux
+	// create the root listener
 	lis, err := net.Listen("tcp", conf.listenAddr)
 	if err != nil {
 		return fmt.Errorf("could not create TCP listener: %w", err)
@@ -109,21 +113,6 @@ func runServer(opts ...serverOption) error {
 		}
 	}()
 
-	// create a muxer and configure gRPC and HTTP routes
-	mux := cmux.New(lis)
-	grpcLis := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
-	defer func() {
-		if err := grpcLis.Close(); err != nil {
-			log.Error(err, "unexpected error closing gRPC mux listener")
-		}
-	}()
-	httpLis := mux.Match(cmux.HTTP1Fast(http.MethodPatch))
-	defer func() {
-		if err := httpLis.Close(); err != nil {
-			log.Error(err, "unexpected error closing HTTP mux listener")
-		}
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -131,41 +120,74 @@ func runServer(opts ...serverOption) error {
 	connStr := fmt.Sprintf("postgres://%s:%s@%s/%s", url.PathEscape(conf.dbUser), url.PathEscape(conf.dbPwd), url.PathEscape(conf.dbAddr), url.PathEscape(conf.dbName))
 	db, err := store.NewPostgresClient(ctx, connStr, store.WithLog(log))
 	if err != nil {
-		return fmt.Errorf("could not connect to the database: %w", err)
+		return fmt.Errorf("could not connect to the database %q at %q: %w", conf.dbName, conf.dbAddr, err)
 	}
 	log.Debug("connected to the database", "addr", conf.dbAddr, "database", conf.dbName, "user", conf.dbUser)
 
-	// spin up gRPC server
-	grpcOpts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(grpc_prometheus.UnaryServerInterceptor),
+	// spin up the Connect server
+	svr := &connectServer{
+		store: db,
 	}
-	grpcSrv := grpc.NewServer(grpcOpts...)
-	apiSrv := newGRPCServer(db)
-	perseusapi.RegisterPerseusServiceServer(grpcSrv, apiSrv)
-	grpc_prometheus.Register(grpcSrv)
+	exporter, err := prometheus.New()
+	if err != nil {
+		return fmt.Errorf("unable to initialize Prometheus metrics exporter: %w", err)
+	}
+	metricsInterceptor, err := otelconnect.NewInterceptor(
+		otelconnect.WithMeterProvider(
+			metric.NewMeterProvider(metric.WithReader(exporter)),
+		),
+		otelconnect.WithTrustRemote(),
+		otelconnect.WithoutServerPeerAttributes(),
+	)
+	if err != nil {
+		return fmt.Errorf("unable to initialize metrics interceptor: %w", err)
+	}
+	path, ch := perseusapiconnect.NewPerseusServiceHandler(
+		svr,
+		connect.WithInterceptors(metricsInterceptor),
+	)
+	// spin up the Vanguard server and transcoder for JSON/REST mappings
+	vs := vanguard.NewService(path, ch)
+	vt, err := vanguard.NewTranscoder([]*vanguard.Service{vs})
+	if err != nil {
+		return fmt.Errorf("unable to initialize Vanguard transcoder: %w", err)
+	}
 
 	// spin up HTTP server
-	httpSrv := newHTTPServer(ctx, conf.listenAddr, db, conf.healthzTimeout)
+	// The supported paths are:
+	//   - /api/v1/* - Vanguard REST mappings for the Connect endpoints
+	//   - /ui/ - web UI
+	//   - /healthz/ - server health checks
+	//   - /metrics/ - Prometheus server metrics
+	//   - /debug/pprof/* - pprof runtime profiles
+	mux := http.NewServeMux()
+	mux.Handle("/", vt)
+	mux.Handle("/ui/", handleUX())
+	mux.Handle("/healthz", handleHealthz(db, conf.healthzTimeout))
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+	httpSrv := http.Server{
+		Handler:           h2c.NewHandler(mux, &http2.Server{}),
+		ReadHeaderTimeout: time.Second,
+	}
 
 	// start services
 	// . use x/sync/errgroup so we can stop everything at once via the context
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		log.Debug("serving gRPC")
-		defer log.Debug("gRPC server closed")
-		return grpcSrv.Serve(grpcLis)
-	})
-	eg.Go(func() error {
 		log.Debug("serving HTTP/REST")
 		defer log.Debug("HTTP/REST server closed")
-		return httpSrv.Serve(httpLis)
+		return httpSrv.Serve(lis)
 	})
 
 	// handle shutdown
 	eg.Go(func() (err error) {
 		defer func() {
 			cancel()
-			grpcSrv.GracefulStop()
 			err = httpSrv.Shutdown(ctx)
 		}()
 
@@ -187,8 +209,6 @@ func runServer(opts ...serverOption) error {
 		}
 	})
 
-	// spin up the cmux
-	go func() { _ = mux.Serve() }()
 	log.Info("Server listening", "addr", conf.listenAddr)
 	defer log.Info("Server exited")
 	// wait for shutdown
@@ -197,29 +217,4 @@ func runServer(opts ...serverOption) error {
 	}
 
 	return nil
-}
-
-// newHTTPServer initializes and configures a new http.ServerMux that serves various endpoints.
-//
-// The supported paths are:
-//   - /api/v1/* - gRPC Gateway REST mappings for the gRPC endpoints
-//   - /ui/ - web UI
-//   - /healthz/ - server health checks
-//   - /metrics/ - Prometheus server metrics
-//   - /debug/pprof/* - pprof runtime profiles
-func newHTTPServer(ctx context.Context, grpcAddr string, db store.Store, healthzTimeout time.Duration) http.Server {
-	mux := http.NewServeMux()
-	mux.Handle("/", handleGrpcGateway(ctx, grpcAddr))
-	mux.Handle("/ui/", handleUX())
-	mux.Handle("/healthz", handleHealthz(db, healthzTimeout))
-	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/debug/pprof/", pprof.Index)
-	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
-	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
-	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
-	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
-	return http.Server{
-		Handler:           mux,
-		ReadHeaderTimeout: time.Second,
-	}
 }

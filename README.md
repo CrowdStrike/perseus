@@ -53,13 +53,23 @@ version.
 
 ##### Service Architecture
 
-The `perseus` service exposes a gRPC API, along with JSON/REST mappings using the [gRPC Gateway](https://github.com/grpc-ecosystem/grpc-gateway) project for exposure to web-based consumers via a set of paths under `/api/v1/*`.  Both endpoints, plus a very basic web UI for testing, are served on a single port using [cmux](https://github.com/soheilhy/cmux).
+The `perseus` service is built on [Connect](https://connectrpc.com) to provide an API that supports
+binary gRPC and HTTP JSON/REST requests.  Both RPC bindings are provided on a single port using
+[Vanguard](https://connectrpc.com/vanguard), with the JSON/REST endpoints at a nested path of `/api/v1/*`.
+Additionally, a basic web-based user interface is available at `/ui`.
 
-In addition to the interactive endpoints, the service also exports an HTTP health check at `/healthz/` and basic Prometheus metrics at `/metrics/`.  For debugging and troubleshooting, the service supports retrieving [Go `pprof` data](https://pkg.go.dev/net/http/pprof) via HTTP at `/debug/pprof*`.
+In addition to the interactive endpoints, the service also exports an HTTP health check at `/healthz`
+and basic Prometheus metrics at `/metrics`.  For debugging and troubleshooting, the service supports
+retrieving [Go `pprof` data](https://pkg.go.dev/net/http/pprof) via HTTP at `/debug/pprof*`.
 
 #### Running the Service
 
-For simplicity, we publish a pre-built Docker image (based on a `scratch` base) to the GitHub Container Registry when each release is tagged.  The image runs `perseus server` and exposes port 31138, which you can map to whatever is appropriate for your environment.  You will need to provide the URL location of the Perseus database, along with a valid username and password to connect, via environment variables.  The default database name is "perseus", but you can override that by also providing a `DB_NAME` environment variable.
+For simplicity, we publish a pre-built Docker image (based on a `scratch` base) to the GitHub Container
+Registry when each release is tagged.  The image runs `perseus server` and exposes port 31138, which
+you can map to whatever is appropriate for your environment.  You will need to provide the URL location
+of the Perseus database, along with a valid username and password to connect, via environment variables.
+The default database name is "perseus", but you can override that by also providing a `DB_NAME`
+environment variable.
 
     > docker run --rm -e DB_ADDR=... -e DB_USER=... -e DBPASS=... -p 31138:31138 ghcr.io/crowdstrike/perseus:latest
 
@@ -108,7 +118,8 @@ The first two commands return modules and versions based on glob pattern matches
     module github.com/example/foo has version v1.1.0
     ...
 
-The `ancestors` and `descendants` commands walk the graph to return dependency trees, either what a specified version of a module depends on or what modules depend on it.
+The `ancestors` and `descendants` commands walk the graph to return dependency trees, either what a
+specified version of a module depends on or what modules depend on it.
 
     # show the modules that v1.2.0 of github.com/example/foo depends on as a tabular list
     > perseus query ancestors github.com/example/foo@v1.2.0 --list
@@ -135,7 +146,8 @@ The `ancestors` and `descendants` commands walk the graph to return dependency t
         ]
     }
 
-In addition to text-based results using `--json`, `--list` or `--format`, the `ancestor` and `descendant` commands also supports outputting DOT directed graphs using the `--dot` flag.
+In addition to text-based results using `--json`, `--list` or `--format`, the `ancestor` and `descendant`
+commands also supports outputting DOT directed graphs using the `--dot` flag.
 
     # generate an SVG image of the dependency graph for the highest version of github.com/example/foo
     > perseus query ancestors github.com/example/foo --dot | dot -Tsvg -o ~/foo_deps.svg

@@ -9,17 +9,13 @@ managed:
 plugins:
   - name: go
     opt: paths=source_relative
-    out: ./perseusapi
-  - name: go-grpc
+    out: perseusapi
+  - name: connect-go
     opt:
       - paths=source_relative
-    out: ./perseusapi
-  - name: grpc-gateway
-    opt:
-      - paths=source_relative
-      - allow_repeated_fields_in_body=true
-    out: ./perseusapi
+    out: perseusapi
   - name: openapiv2
     opt:
       - allow_repeated_fields_in_body=true
-    out: ./docs
+    out: docs
+  

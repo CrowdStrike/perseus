@@ -264,6 +264,7 @@
             "schema": {
               "type": "array",
               "items": {
+                "type": "object",
                 "$ref": "#/definitions/perseusapiModule"
               }
             }
@@ -318,6 +319,7 @@
         "modules": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/perseusapiModule"
           }
         },
@@ -332,6 +334,7 @@
         "modules": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/perseusapiModule"
           }
         },
@@ -372,6 +375,7 @@
         "modules": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/perseusapiModule"
           }
         },
@@ -405,6 +409,7 @@
         "details": {
           "type": "array",
           "items": {
+            "type": "object",
             "$ref": "#/definitions/protobufAny"
           }
         }

@@ -8,12 +8,11 @@ import (
 	"os"
 	"strings"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/module"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
-	"github.com/CrowdStrike/perseus/perseusapi"
+	"github.com/CrowdStrike/perseus/perseusapi/perseusapiconnect"
 )
 
 const findPathsExampleUsage = `# find any path between the latest version of github.com/example/foo and any version of gRPC
@@ -73,10 +72,7 @@ func runFindPathsCommand(cmd *cobra.Command, args []string) (err error) {
 	defer cancel()
 
 	updateSpinner("connecting to the server at " + conf.serverAddr)
-	ps, err := conf.dialServer()
-	if err != nil {
-		return err
-	}
+	ps := conf.getClient()
 
 	// validate the 'from' and 'to' modules, defaulting to the highest known release for 'from'
 	// if no version is specified
@@ -109,8 +105,8 @@ func runFindPathsCommand(cmd *cobra.Command, args []string) (err error) {
 	}()
 	for p := range pf.findPathsBetween(ctx, from, to) {
 		if p.err != nil {
-			if status.Code(p.err) == codes.Canceled || errors.Is(p.err, context.Canceled) {
-				// context cancellation is not a failure
+			// context cancellation is not a failure
+			if errors.Is(p.err, context.Canceled) || connect.CodeOf(err) == connect.CodeCanceled {
 				return nil
 			}
 			return p.err
@@ -154,7 +150,7 @@ func printJSONLinesTo(w io.Writer, paths [][]module.Version) {
 
 // parseModuleArg parses the provided string as a Go module path, optionally with a version, and returns
 // the parsed result.  If no version is specified, the highest known version is used.
-func parseModuleArg(ctx context.Context, arg string, client perseusapi.PerseusServiceClient, findLatest bool, status func(string)) (module.Version, error) {
+func parseModuleArg(ctx context.Context, arg string, client perseusapiconnect.PerseusServiceClient, findLatest bool, status func(string)) (module.Version, error) {
 	defer status("")
 	var m module.Version
 	toks := strings.Split(arg, "@")

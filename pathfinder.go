@@ -8,11 +8,12 @@ import (
 	"golang.org/x/mod/module"
 
 	"github.com/CrowdStrike/perseus/perseusapi"
+	"github.com/CrowdStrike/perseus/perseusapi/perseusapiconnect"
 )
 
 // newPathFinder initializes and returns a new [pathFinder] instance using the provided Perseus
 // client, maximum depth, and status callback.
-func newPathFinder(c perseusapi.PerseusServiceClient, maxDepth int, status func(string)) pathFinder {
+func newPathFinder(c perseusapiconnect.PerseusServiceClient, maxDepth int, status func(string)) pathFinder {
 	return pathFinder{
 		c:        c,
 		maxDepth: maxDepth,
@@ -23,7 +24,7 @@ func newPathFinder(c perseusapi.PerseusServiceClient, maxDepth int, status func(
 // pathFinder queries the Perseus database to contruct dependency paths of up to maxDepth steps between
 // two modules.
 type pathFinder struct {
-	c        perseusapi.PerseusServiceClient
+	c        perseusapiconnect.PerseusServiceClient
 	status   func(string)
 	maxDepth int
 
