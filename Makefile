@@ -26,7 +26,8 @@ BUILD_TIME_TOOLS =\
 	github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway\
 	github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2 \
     google.golang.org/protobuf/cmd/protoc-gen-go \
-    google.golang.org/grpc/cmd/protoc-gen-go-grpc
+    google.golang.org/grpc/cmd/protoc-gen-go-grpc \
+	connectrpc.com/connect/cmd/protoc-gen-connect-go
 
 .PHONY: install-tools
 install-tools: ensure-local-bin-dir

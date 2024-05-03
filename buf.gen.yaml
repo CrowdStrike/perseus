@@ -23,3 +23,8 @@ plugins:
     opt:
       - allow_repeated_fields_in_body=true
     out: ./docs
+  - name: connect-go
+    opt:
+      - paths=source_relative
+    out: ./perseusapi
+  
