@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
@@ -192,22 +193,19 @@ func getModuleInfoFromProxy(modulePath string) (moduleInfo, error) {
 func applyUpdates(conf clientConfig, mod module.Version, deps []module.Version) (err error) {
 	// create the client and call the server
 	ctx := context.Background()
-	client, err := conf.dialServer()
-	if err != nil {
-		return err
-	}
-	req := perseusapi.UpdateDependenciesRequest{
+	client := conf.getClient()
+	req := connect.NewRequest(&perseusapi.UpdateDependenciesRequest{
 		ModuleName: mod.Path,
 		Version:    mod.Version,
-	}
-	req.Dependencies = make([]*perseusapi.Module, len(deps))
+	})
+	req.Msg.Dependencies = make([]*perseusapi.Module, len(deps))
 	for i, d := range deps {
-		req.Dependencies[i] = &perseusapi.Module{
+		req.Msg.Dependencies[i] = &perseusapi.Module{
 			Name:     d.Path,
 			Versions: []string{d.Version},
 		}
 	}
-	if _, err = client.UpdateDependencies(ctx, &req); err != nil {
+	if _, err = client.UpdateDependencies(ctx, req); err != nil {
 		return err
 	}
 	return nil

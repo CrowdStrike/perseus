@@ -7,6 +7,7 @@ require (
 	connectrpc.com/otelconnect v0.7.0
 	connectrpc.com/vanguard v0.1.0
 	github.com/Masterminds/squirrel v1.5.4
+	github.com/bufbuild/httplb v0.2.0
 	github.com/go-git/go-git/v5 v5.12.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.19.1
 	github.com/jackc/pgx/v4 v4.18.3
@@ -21,8 +22,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.25.0
 	golang.org/x/mod v0.17.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240227224415-6ceb2ff114de
-	google.golang.org/grpc v1.63.2
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.3.0
 	google.golang.org/protobuf v1.33.0
 )
 
@@ -64,6 +63,7 @@ require (
 	golang.org/x/tools v0.13.0 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240227224415-6ceb2ff114de // indirect
+	google.golang.org/grpc v1.63.0 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
 
