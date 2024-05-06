@@ -3,7 +3,7 @@ module github.com/CrowdStrike/perseus
 go 1.21
 
 require (
-	connectrpc.com/connect v1.16.0
+	connectrpc.com/connect v1.16.1
 	connectrpc.com/otelconnect v0.7.0
 	connectrpc.com/vanguard v0.1.0
 	github.com/Masterminds/squirrel v1.5.4
