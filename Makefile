@@ -13,10 +13,10 @@ all: protos bin
 check: lint check-goreleaser-config test
 
 .PHONY: protos
-protos: install-tools check-buf-install
+protos: install-tools install-buf
 	$(info Generating Go code from Protobuf definitions...)
-	@buf generate ./perseusapi
-	@buf build ./perseusapi -o ./perseusapi/perseusapi.protoset
+	@buf generate
+	@buf build -o perseusapi/perseusapi.protoset
 
 .PHONY: test
 test:
@@ -27,9 +27,15 @@ BUILD_TIME_TOOLS =\
 	google.golang.org/protobuf/cmd/protoc-gen-go \
 	connectrpc.com/connect/cmd/protoc-gen-connect-go
 
+BUF_VERSION := v1.32.0
+
 .PHONY: install-tools
 install-tools: ensure-local-bin-dir
 	@GOBIN=${PROJECT_BASE_DIR}/bin go install ${BUILD_TIME_TOOLS}
+
+.PHONY: install-buf
+install-buf: ensure-local-bin-dir
+	@GOBIN=${PROJECT_BASE_DIR}/bin go install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
 
 .PHONY: ensure-local-bin-dir
 ensure-local-bin-dir:
@@ -52,7 +58,7 @@ lint-go: check-golangci-lint-install
 	@golangci-lint run ./...
 
 .PHONY: lint-protos
-lint-protos: check-buf-install
+lint-protos: install-buf
 	$(info Linting Protobuf files ...)
 	@buf lint ./perseusapi
 
@@ -71,12 +77,6 @@ ifeq ("${NEXT_VERSION}", "")
 	$(error Must specify the next version via $$NEXT_VERSION)
 else
 	git cliff --unreleased --tag ${NEXT_VERSION} --prepend CHANGELOG.md
-endif
-
-.PHONY: check-buf-install
-check-buf-install:
-ifeq ("$(shell command -v buf)", "")
-	$(error buf was not found.  Please install it using the method of your choice. (https://docs.buf.build/installation))
 endif
 
 .PHONY: check-golangci-lint-install
