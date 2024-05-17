@@ -18,7 +18,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.9.0
 	github.com/theckman/yacspin v0.13.12
-	go.opentelemetry.io/otel/exporters/prometheus v0.47.0
+	go.opentelemetry.io/otel/exporters/prometheus v0.48.0
 	go.opentelemetry.io/otel/sdk/metric v1.26.0
 	golang.org/x/mod v0.17.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240227224415-6ceb2ff114de
