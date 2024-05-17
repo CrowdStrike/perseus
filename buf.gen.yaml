@@ -1,21 +1,23 @@
-version: v1
+version: v2
 managed:
   enabled: true
-  go_package_prefix:
-    default: github.com/CrowdStrike/perseus/perseusapi
-    except:
-      - buf.build/googleapis/googleapis
-      - buf.build/grpc-ecosystem/grpc-gateway
+  disable:
+    - file_option: go_package
+      module: buf.build/googleapis/googleapis
+    - file_option: go_package
+      module: buf.build/grpc-ecosystem/grpc-gateway
+  override:
+    - file_option: go_package_prefix
+      value: github.com/CrowdStrike/perseus/perseusapi
 plugins:
-  - name: go
+  - local: protoc-gen-go
+    out: perseusapi
     opt: paths=source_relative
+  - local: protoc-gen-connect-go
     out: perseusapi
-  - name: connect-go
-    opt:
-      - paths=source_relative
-    out: perseusapi
-  - name: openapiv2
-    opt:
-      - allow_repeated_fields_in_body=true
+    opt: paths=source_relative
+  - local: protoc-gen-openapiv2
     out: docs
-  
+    opt: allow_repeated_fields_in_body=true
+inputs:
+  - directory: .
