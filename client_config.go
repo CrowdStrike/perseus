@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"os"
 	"strconv"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/bufbuild/httplb"
@@ -86,6 +87,9 @@ func (conf *clientConfig) getClient() (client perseusapiconnect.PerseusServiceCl
 			MinVersion: tls.VersionTLS13,
 		}
 		opts = append(opts, httplb.WithTLSConfig(&tlsc, 0))
+	} else if strings.HasPrefix(conf.serverAddr, "http:") {
+		// switch to H2C if TLS is disabled since we're using gRPC over Connect
+		conf.serverAddr = "h2c" + conf.serverAddr[4:]
 	}
 
 	// we include WithGRPC() so that the CLI can hit an existing gRPC-based server instance
