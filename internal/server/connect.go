@@ -76,6 +76,31 @@ func (s *connectServer) ListModules(ctx context.Context, req *connect.Request[pe
 		mod := &perseusapi.Module{
 			Name: m.Name,
 		}
+		// include the latest version for each matched module
+		versionQ := store.ModuleVersionQuery{
+			ModuleFilter:      m.Name,
+			LatestOnly:        true,
+			IncludePrerelease: false,
+		}
+		vers, _, err := s.store.QueryModuleVersions(ctx, versionQ)
+		if err != nil {
+			log.Error(err, "unable to query for latest module version", "moduleFilter", m.Name, "latestOnly", true, "includePrerelease", false)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to determine latest version for module %s: a database operation failed", m.Name))
+		}
+		// if no stable version exists, try to find a pre-release
+		if len(vers) == 0 {
+			versionQ.IncludePrerelease = true
+			vers, _, err = s.store.QueryModuleVersions(ctx, versionQ)
+			if err != nil {
+				log.Error(err, "unable to query for latest module version", "moduleFilter", m.Name, "latestOnly", true, "includePrerelease", true)
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to determine latest version for module %s: a database operation failed", m.Name))
+			}
+		}
+		// assign the latest version of the module, if found
+		if len(vers) > 0 {
+			mod.Versions = []string{"v" + vers[0].Version}
+		}
+
 		resp.Modules = append(resp.Modules, mod)
 	}
 	return connect.NewResponse(resp), nil
