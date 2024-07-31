@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
@@ -192,7 +193,10 @@ func getModuleInfoFromProxy(modulePath string) (moduleInfo, error) {
 // applyUpdates calls the Perseus server to update the dependencies of the specified module
 func applyUpdates(conf clientConfig, mod module.Version, deps []module.Version) (err error) {
 	// create the client and call the server
-	ctx := context.Background()
+	// . be sure we don't hang "forever".  5s is a bit over 2X the cumulative retry delays (1900 ms)
+	//   so this shouldn't generate any pre-mature aborts
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	client := conf.getClient()
 	req := connect.NewRequest(&perseusapi.UpdateDependenciesRequest{
 		ModuleName: mod.Path,
@@ -205,15 +209,17 @@ func applyUpdates(conf clientConfig, mod module.Version, deps []module.Version) 
 			Versions: []string{d.Version},
 		}
 	}
-	if _, err = client.UpdateDependencies(ctx, req); err != nil {
-		return err
-	}
-	return nil
+
+	_, err = retryOp(func() (struct{}, error) {
+		_, err := client.UpdateDependencies(ctx, req)
+		return struct{}{}, err
+	})
+	return err
 }
 
 // moduleInfo represents the relevant Go module metadata for this application.
 //
-// This struct does not contain a version because the Go module library (golang.org/x/mod/modfile)
+// Values may not contain a version because the Go module library (golang.org/x/mod/modfile)
 // does not return a version for the "main" module even if it is a library package.
 type moduleInfo struct {
 	// the module name, ex: github.com/CrowdStrike/perseus

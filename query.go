@@ -348,7 +348,9 @@ func lookupLatestModuleVersion(ctx context.Context, c perseusapiconnect.PerseusS
 		ModuleName:    modulePath,
 		VersionOption: perseusapi.ModuleVersionOption_latest,
 	})
-	resp, err := c.ListModuleVersions(ctx, req)
+	resp, err := retryOp(func() (*connect.Response[perseusapi.ListModuleVersionsResponse], error) {
+		return c.ListModuleVersions(ctx, req)
+	})
 	if err != nil {
 		return "", err
 	}
@@ -391,7 +393,9 @@ func walkDependencies(ctx context.Context, client perseusapiconnect.PerseusServi
 		Direction:  direction,
 	})
 	for done := false; !done; done = (req.Msg.PageToken != "") {
-		resp, err := client.QueryDependencies(ctx, req)
+		resp, err := retryOp(func() (*connect.Response[perseusapi.QueryDependenciesResponse], error) {
+			return client.QueryDependencies(ctx, req)
+		})
 		if err != nil {
 			return dependencyTreeNode{}, err
 		}
@@ -424,43 +428,21 @@ func listModules(ctx context.Context, ps perseusapiconnect.PerseusServiceClient,
 	})
 	for done := false; !done; {
 		status("retrieving modules")
-		resp, err := ps.ListModules(ctx, req)
+		resp, err := retryOp(func() (*connect.Response[perseusapi.ListModulesResponse], error) {
+			return ps.ListModules(ctx, req)
+		})
 		if err != nil {
-			return nil, fmt.Errorf("todo: %w", err)
+			return nil, fmt.Errorf("Unable to list modules matching the provided filter: %w", err)
 		}
 		for _, mod := range resp.Msg.Modules {
-			status(fmt.Sprintf("determining latest version for %s", mod.GetName()))
-			req2 := connect.NewRequest(&perseusapi.ListModuleVersionsRequest{
-				ModuleName:    mod.GetName(),
-				VersionOption: perseusapi.ModuleVersionOption_latest,
-			})
-			resp2, err := ps.ListModuleVersions(ctx, req2)
-			switch {
-			case err != nil:
-				return nil, fmt.Errorf("Unable to determine the current version for %s: %w", mod.GetName(), err)
-
-			case len(resp2.Msg.Modules) == 0 || len(resp2.Msg.Modules[0].Versions) == 0:
-				status(fmt.Sprintf("no stable version found for %s, trying to find a pre-release", mod.GetName()))
-				req2.Msg.IncludePrerelease = true
-				resp2, err = ps.ListModuleVersions(ctx, req2)
-				switch {
-				case err != nil:
-					return nil, fmt.Errorf("Unable to determine the current version for %s: %w", mod.GetName(), err)
-
-				case len(resp2.Msg.Modules) == 0 || len(resp2.Msg.Modules[0].Versions) == 0:
-					return nil, fmt.Errorf("No versions found for %s", mod.GetName())
-
-				default:
-					// got it
-				}
-			default:
-				// got it
-			}
-
-			results = append(results, dependencyItem{
+			item := dependencyItem{
 				Path:    mod.GetName(),
-				Version: resp2.Msg.Modules[0].Versions[0],
-			})
+				Version: "-", // show a dash if we don't have a version
+			}
+			if vers := mod.GetVersions(); len(vers) > 0 {
+				item.Version = vers[0]
+			}
+			results = append(results, item)
 		}
 		req.Msg.PageToken = resp.Msg.GetNextPageToken()
 		done = (req.Msg.PageToken != "")
@@ -493,7 +475,9 @@ func listModuleVersions(ctx context.Context, ps perseusapiconnect.PerseusService
 			apiRequest.Msg.VersionOption = perseusapi.ModuleVersionOption_latest
 		}
 		req.updateStatus(fmt.Sprintf("retreiving versions for modules matching %q", req.modulePattern))
-		resp, err := ps.ListModuleVersions(ctx, apiRequest)
+		resp, err := retryOp(func() (*connect.Response[perseusapi.ListModuleVersionsResponse], error) {
+			return ps.ListModuleVersions(ctx, apiRequest)
+		})
 		if err != nil {
 			return nil, fmt.Errorf("todo: %w", err)
 		}
