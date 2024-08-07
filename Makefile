@@ -76,7 +76,8 @@ update-changelog: check-git-cliff-install
 ifeq ("${NEXT_VERSION}", "")
 	$(error Must specify the next version via $$NEXT_VERSION)
 else
-	git cliff --unreleased --tag ${NEXT_VERSION} --prepend CHANGELOG.md
+	$(info Generating change log for ${NEXT_VERSION} ...)
+	@git cliff --unreleased --ignore-tags 'v\d+\.\d+\.\d+-.+' --tag ${NEXT_VERSION} --prepend CHANGELOG.md
 endif
 
 .PHONY: check-golangci-lint-install
