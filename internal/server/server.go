@@ -163,7 +163,7 @@ func runServer(opts ...serverOption) error {
 	mux := http.NewServeMux()
 	mux.Handle("/", vt)
 	mux.Handle("/ui/", handleUX())
-	mux.Handle("/healthz", handleHealthz(db, conf.healthzTimeout))
+	mux.Handle("/healthz", handleHealthz(db, conf.healthzTimeout, log))
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
