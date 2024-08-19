@@ -9,7 +9,7 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/bufbuild/httplb v0.3.0
 	github.com/go-git/go-git/v5 v5.12.0
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.21.0
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.22.0
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/mattn/go-isatty v0.0.20
@@ -21,7 +21,7 @@ require (
 	go.opentelemetry.io/otel/exporters/prometheus v0.50.0
 	go.opentelemetry.io/otel/sdk/metric v1.28.0
 	golang.org/x/mod v0.20.0
-	google.golang.org/genproto/googleapis/api v0.0.0-20240723171418-e6d459c13d2a
+	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142
 	google.golang.org/protobuf v1.34.2
 )
 
@@ -64,7 +64,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.28.0 // indirect
 	go.opentelemetry.io/otel/trace v1.28.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240723171418-e6d459c13d2a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/grpc v1.64.1 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
