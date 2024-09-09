@@ -1,6 +1,7 @@
 module github.com/CrowdStrike/perseus
 
 go 1.21
+toolchain go1.22.5
 
 require (
 	connectrpc.com/connect v1.16.2
@@ -20,7 +21,7 @@ require (
 	github.com/theckman/yacspin v0.13.12
 	go.opentelemetry.io/otel/exporters/prometheus v0.51.0
 	go.opentelemetry.io/otel/sdk/metric v1.29.0
-	golang.org/x/mod v0.20.0
+	golang.org/x/mod v0.21.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142
 	google.golang.org/protobuf v1.34.2
 )
