@@ -261,7 +261,7 @@ func (p *PostgresClient) QueryModuleVersions(ctx context.Context, query ModuleVe
 		q = q.Offset(uint64(offset))
 	}
 	if query.Count > 0 {
-		q = q.Limit(uint64(query.Count))
+		q = q.Limit(uint64(query.Count)) //nolint: gosec // no overflow occurs
 	}
 
 	var (
