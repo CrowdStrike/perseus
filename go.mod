@@ -24,7 +24,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.30.0
 	golang.org/x/mod v0.21.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142
-	google.golang.org/protobuf v1.34.2
+	google.golang.org/protobuf v1.35.1
 )
 
 require (
