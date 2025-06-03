@@ -1,14 +1,12 @@
 # options for analysis running
 run:
   modules-download-mode: readonly
-  deadline: 10m
   timeout: 10m
 
 # output configuration options
 output:
   print-issued-lines: false
   sort-results: true
-  uniq-by-line: false
 
 issues:
   exclude-files:
@@ -51,4 +49,3 @@ linters-settings:
     require-explanation: true
   revive:
     ignore-generated-header: true
-    min-confidence: 0
