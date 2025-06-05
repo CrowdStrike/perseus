@@ -52,7 +52,7 @@ func createUpdateCommand() *cobra.Command {
 }
 
 // runUpdateCmd implements the 'update' CLI sub-command.
-func runUpdateCmd(cmd *cobra.Command, args []string) error {
+func runUpdateCmd(cmd *cobra.Command, _ []string) error {
 	// parse parameters and setup options
 	var (
 		opts []clientOption
@@ -129,9 +129,9 @@ func getModuleInfoFromDir(dir string) (moduleInfo, error) {
 		case 1:
 			moduleVersion = versionArg(tags[0])
 		case 0:
-			return moduleInfo{}, fmt.Errorf("No semver tags exist at the current commit. Please specify a version explicitly.")
+			return moduleInfo{}, fmt.Errorf("no semver tags exist at the current commit. Please specify a version explicitly")
 		default:
-			return moduleInfo{}, fmt.Errorf("Multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
+			return moduleInfo{}, fmt.Errorf("multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
 		}
 	}
 

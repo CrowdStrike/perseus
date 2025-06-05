@@ -124,7 +124,6 @@ func runListModulesCmd(cmd *cobra.Command, args []string) error {
 	if formatAsDotGraph {
 		return fmt.Errorf("DOT graph output is not supported for this command")
 	}
-	formatAsJSON = formatAsJSON || !(formatAsList || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatTemplate != "") {
 		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
 	}
@@ -159,7 +158,6 @@ func runListModuleVersionsCmd(cmd *cobra.Command, args []string) error {
 	if formatAsDotGraph {
 		return fmt.Errorf("DOT graph output is not supported for this command")
 	}
-	formatAsJSON = formatAsJSON || !(formatAsList || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatTemplate != "") {
 		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
 	}
@@ -230,7 +228,6 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("The specified module name %q is invalid: %w", rootMod, err)
 	}
 
-	formatAsJSON = formatAsJSON || !(formatAsList || formatAsDotGraph || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatAsDotGraph, formatTemplate != "") {
 		return fmt.Errorf("Only one of --json, --list, --dot, or --format may be specified")
 	}
@@ -291,11 +288,11 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		stopSpinner()
 		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
 		defer func() { _ = tw.Flush() }()
-		if _, err := tw.Write([]byte(col1Label + "\tDirect\n")); err != nil {
+		if _, err := fmt.Fprintf(tw, col1Label+"\tDirect\n"); err != nil {
 			return fmt.Errorf("Error writing tabular output: %w", err)
 		}
 		for _, e := range list {
-			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%v\n", e.Name(), e.IsDirect))); err != nil {
+			if _, err := fmt.Fprintf(tw, fmt.Sprintf("%s\t%v\n", e.Name(), e.IsDirect)); err != nil {
 				return fmt.Errorf("Error writing tabular output: %w", err)
 			}
 		}
@@ -686,7 +683,7 @@ func writeResults(w io.Writer, results []dependencyItem) error {
 			return fmt.Errorf("Error writing tabular output: %w", err)
 		}
 		for _, e := range results {
-			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%s\n", e.Path, e.Version))); err != nil {
+			if _, err := fmt.Fprintf(tw, fmt.Sprintf("%s\t%s\n", e.Path, e.Version)); err != nil {
 				return fmt.Errorf("Error writing tabular output: %w", err)
 			}
 		}

@@ -67,7 +67,7 @@ func (s *connectServer) ListModules(ctx context.Context, req *connect.Request[pe
 	mods, pageToken, err := s.store.QueryModules(ctx, msg.Filter, msg.PageToken, int(msg.PageSize))
 	if err != nil {
 		log.Error(err, "error querying the database", "filter", msg.Filter, "pageToken", msg.PageToken, "pageSize", msg.PageSize)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to query the database"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to query the database"))
 	}
 	resp := &perseusapi.ListModulesResponse{
 		NextPageToken: pageToken,
@@ -85,7 +85,7 @@ func (s *connectServer) ListModules(ctx context.Context, req *connect.Request[pe
 		vers, _, err := s.store.QueryModuleVersions(ctx, versionQ)
 		if err != nil {
 			log.Error(err, "unable to query for latest module version", "moduleFilter", m.Name, "latestOnly", true, "includePrerelease", false)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to determine latest version for module %s: a database operation failed", m.Name))
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to determine latest version for module %s: a database operation failed", m.Name))
 		}
 		// if no stable version exists, try to find a pre-release
 		if len(vers) == 0 {
@@ -93,7 +93,7 @@ func (s *connectServer) ListModules(ctx context.Context, req *connect.Request[pe
 			vers, _, err = s.store.QueryModuleVersions(ctx, versionQ)
 			if err != nil {
 				log.Error(err, "unable to query for latest module version", "moduleFilter", m.Name, "latestOnly", true, "includePrerelease", true)
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to determine latest version for module %s: a database operation failed", m.Name))
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to determine latest version for module %s: a database operation failed", m.Name))
 			}
 		}
 		// assign the latest version of the module, if found
