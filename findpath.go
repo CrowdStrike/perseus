@@ -58,11 +58,11 @@ func runFindPathsCommand(cmd *cobra.Command, args []string) (err error) {
 	}
 	switch len(args) {
 	case 0, 1:
-		return fmt.Errorf("The 'from' and 'to' modules are required")
+		return fmt.Errorf("the 'from' and 'to' modules are required")
 	case 2:
 		break
 	default:
-		return fmt.Errorf("Only 2 positional arguments, the 'from' and 'to' modules, are supported")
+		return fmt.Errorf("only 2 positional arguments, the 'from' and 'to' modules, are supported")
 	}
 
 	updateSpinner, stopSpinner := startSpinner()
@@ -161,16 +161,16 @@ func parseModuleArg(ctx context.Context, arg string, client perseusapiconnect.Pe
 		m.Path = toks[0]
 		m.Version = toks[1]
 	default:
-		return module.Version{}, fmt.Errorf("Invalid 'from' module path/version %q", arg)
+		return module.Version{}, fmt.Errorf("invalid 'from' module path/version %q", arg)
 	}
 	if err := module.CheckPath(m.Path); err != nil {
-		return module.Version{}, fmt.Errorf("The specified module name %q is invalid: %w", m, err)
+		return module.Version{}, fmt.Errorf("the specified module name %q is invalid: %w", m, err)
 	}
 	if m.Version == "" && findLatest {
 		status("determining current version for " + m.String())
 		v, err := lookupLatestModuleVersion(ctx, client, m.Path)
 		if err != nil {
-			return module.Version{}, fmt.Errorf("Unable to determine the current version for %q: %w", m.Path, err)
+			return module.Version{}, fmt.Errorf("unable to determine the current version for %q: %w", m.Path, err)
 		}
 		m.Version = v
 	}

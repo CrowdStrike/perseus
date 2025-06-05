@@ -150,7 +150,7 @@ func (s *connectServer) ListModuleVersions(ctx context.Context, req *connect.Req
 			"pageSize", msg.GetPageSize(),
 		}
 		log.Error(err, "unable to query module versions", kvs...)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to retrieve version list for module %s: a database operation failed", msg.GetModuleName()))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to retrieve version list for module %s: a database operation failed", msg.GetModuleName()))
 	}
 
 	resp := perseusapi.ListModuleVersionsResponse{
@@ -202,7 +202,7 @@ func (s *connectServer) UpdateDependencies(ctx context.Context, req *connect.Req
 
 	if err := s.store.SaveModuleDependencies(ctx, mod, deps...); err != nil {
 		log.Error(err, "unable to save module dependencies", "module", mod, "dependencies", deps)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to update the graph: database operation failed"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to update the graph: database operation failed"))
 	}
 
 	resp := perseusapi.UpdateDependenciesResponse{}
@@ -238,7 +238,7 @@ func (s *connectServer) QueryDependencies(ctx context.Context, req *connect.Requ
 			"pageSize", msg.GetPageSize(),
 		}
 		log.Error(err, "unable to query module dependencies", kvs...)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to query the graph: a database operation failed"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to query the graph: a database operation failed"))
 	}
 	resp := perseusapi.QueryDependenciesResponse{
 		NextPageToken: pageToken,
