@@ -114,15 +114,15 @@ func (s *connectServer) ListModuleVersions(ctx context.Context, req *connect.Req
 	if mod == "" {
 		mod = msg.GetModuleFilter()
 		if mod == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("Either the module name or a module filter pattern must be specified"))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("either the module name or a module filter pattern must be specified"))
 		}
 	}
 	switch vopt {
 	case perseusapi.ModuleVersionOption_none:
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("The version option cannot be 'none'"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("the version option cannot be 'none'"))
 	case perseusapi.ModuleVersionOption_latest:
 		if pageToken != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("Paging is only supported when the version option is 'all'"))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("paging is only supported when the version option is 'all'"))
 		}
 	default:
 		// all good
