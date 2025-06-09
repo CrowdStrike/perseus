@@ -5,7 +5,7 @@ go 1.22.0
 toolchain go1.22.7
 
 require (
-	connectrpc.com/connect v1.17.0
+	connectrpc.com/connect v1.18.1
 	connectrpc.com/otelconnect v0.7.1
 	connectrpc.com/vanguard v0.3.0
 	github.com/Masterminds/squirrel v1.5.4
