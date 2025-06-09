@@ -67,7 +67,7 @@ func (s *connectServer) ListModules(ctx context.Context, req *connect.Request[pe
 	mods, pageToken, err := s.store.QueryModules(ctx, msg.Filter, msg.PageToken, int(msg.PageSize))
 	if err != nil {
 		log.Error(err, "error querying the database", "filter", msg.Filter, "pageToken", msg.PageToken, "pageSize", msg.PageSize)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to query the database"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to query the database"))
 	}
 	resp := &perseusapi.ListModulesResponse{
 		NextPageToken: pageToken,
@@ -85,7 +85,7 @@ func (s *connectServer) ListModules(ctx context.Context, req *connect.Request[pe
 		vers, _, err := s.store.QueryModuleVersions(ctx, versionQ)
 		if err != nil {
 			log.Error(err, "unable to query for latest module version", "moduleFilter", m.Name, "latestOnly", true, "includePrerelease", false)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to determine latest version for module %s: a database operation failed", m.Name))
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to determine latest version for module %s: a database operation failed", m.Name))
 		}
 		// if no stable version exists, try to find a pre-release
 		if len(vers) == 0 {
@@ -93,7 +93,7 @@ func (s *connectServer) ListModules(ctx context.Context, req *connect.Request[pe
 			vers, _, err = s.store.QueryModuleVersions(ctx, versionQ)
 			if err != nil {
 				log.Error(err, "unable to query for latest module version", "moduleFilter", m.Name, "latestOnly", true, "includePrerelease", true)
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to determine latest version for module %s: a database operation failed", m.Name))
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to determine latest version for module %s: a database operation failed", m.Name))
 			}
 		}
 		// assign the latest version of the module, if found
@@ -114,15 +114,15 @@ func (s *connectServer) ListModuleVersions(ctx context.Context, req *connect.Req
 	if mod == "" {
 		mod = msg.GetModuleFilter()
 		if mod == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("Either the module name or a module filter pattern must be specified"))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("either the module name or a module filter pattern must be specified"))
 		}
 	}
 	switch vopt {
 	case perseusapi.ModuleVersionOption_none:
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("The version option cannot be 'none'"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("the version option cannot be 'none'"))
 	case perseusapi.ModuleVersionOption_latest:
 		if pageToken != "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("Paging is only supported when the version option is 'all'"))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("paging is only supported when the version option is 'all'"))
 		}
 	default:
 		// all good
@@ -150,7 +150,7 @@ func (s *connectServer) ListModuleVersions(ctx context.Context, req *connect.Req
 			"pageSize", msg.GetPageSize(),
 		}
 		log.Error(err, "unable to query module versions", kvs...)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to retrieve version list for module %s: a database operation failed", msg.GetModuleName()))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to retrieve version list for module %s: a database operation failed", msg.GetModuleName()))
 	}
 
 	resp := perseusapi.ListModuleVersionsResponse{
@@ -202,7 +202,7 @@ func (s *connectServer) UpdateDependencies(ctx context.Context, req *connect.Req
 
 	if err := s.store.SaveModuleDependencies(ctx, mod, deps...); err != nil {
 		log.Error(err, "unable to save module dependencies", "module", mod, "dependencies", deps)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to update the graph: database operation failed"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to update the graph: database operation failed"))
 	}
 
 	resp := perseusapi.UpdateDependenciesResponse{}
@@ -238,7 +238,7 @@ func (s *connectServer) QueryDependencies(ctx context.Context, req *connect.Requ
 			"pageSize", msg.GetPageSize(),
 		}
 		log.Error(err, "unable to query module dependencies", kvs...)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("Unable to query the graph: a database operation failed"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unable to query the graph: a database operation failed"))
 	}
 	resp := perseusapi.QueryDependenciesResponse{
 		NextPageToken: pageToken,

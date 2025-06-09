@@ -52,7 +52,7 @@ func createUpdateCommand() *cobra.Command {
 }
 
 // runUpdateCmd implements the 'update' CLI sub-command.
-func runUpdateCmd(cmd *cobra.Command, args []string) error {
+func runUpdateCmd(cmd *cobra.Command, _ []string) error {
 	// parse parameters and setup options
 	var (
 		opts []clientOption
@@ -62,21 +62,21 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 	opts = append(opts, readClientConfigFlags(cmd.Flags())...)
 	for _, fn := range opts {
 		if err := fn(&conf); err != nil {
-			return fmt.Errorf("Could not apply client config option: %w", err)
+			return fmt.Errorf("could not apply client config option: %w", err)
 		}
 	}
 
 	// validate config
 	if conf.serverAddr == "" {
-		return fmt.Errorf("The Perseus server address must be specified")
+		return fmt.Errorf("the Perseus server address must be specified")
 	}
 	filePath, _ := cmd.Flags().GetString("path")
 	modPath, _ := cmd.Flags().GetString("module")
 	if filePath == "" && modPath == "" {
-		return fmt.Errorf("Either a local path (--path) or a module path (--module) must be specified")
+		return fmt.Errorf("either a local path (--path) or a module path (--module) must be specified")
 	}
 	if !xor(filePath != "", modPath != "") {
-		return fmt.Errorf("Either a local path (--path) or a module path (--module) can be specified, but not both")
+		return fmt.Errorf("either a local path (--path) or a module path (--module) can be specified, but not both")
 	}
 
 	var (
@@ -105,7 +105,7 @@ func runUpdateCmd(cmd *cobra.Command, args []string) error {
 		Version: info.Version,
 	}
 	if err := applyUpdates(conf, mod, info.Deps); err != nil {
-		return fmt.Errorf("Unable to update the Perseus graph: %w", err)
+		return fmt.Errorf("unable to update the Perseus graph: %w", err)
 	}
 	return nil
 }
@@ -129,9 +129,9 @@ func getModuleInfoFromDir(dir string) (moduleInfo, error) {
 		case 1:
 			moduleVersion = versionArg(tags[0])
 		case 0:
-			return moduleInfo{}, fmt.Errorf("No semver tags exist at the current commit. Please specify a version explicitly.")
+			return moduleInfo{}, fmt.Errorf("no semver tags exist at the current commit. Please specify a version explicitly")
 		default:
-			return moduleInfo{}, fmt.Errorf("Multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
+			return moduleInfo{}, fmt.Errorf("multiple semver tags exist at the current commit. Please specify a version explicitly. tags=%v", tags)
 		}
 	}
 

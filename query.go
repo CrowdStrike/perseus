@@ -118,15 +118,14 @@ func runListModulesCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("The module match pattern must be provided")
+		return fmt.Errorf("the module match pattern must be provided")
 	}
 
 	if formatAsDotGraph {
 		return fmt.Errorf("DOT graph output is not supported for this command")
 	}
-	formatAsJSON = formatAsJSON || !(formatAsList || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatTemplate != "") {
-		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
+		return fmt.Errorf("only one of --json, --list, or --format may be specified")
 	}
 
 	updateSpinner, stopSpinner := startSpinner()
@@ -153,15 +152,14 @@ func runListModuleVersionsCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("The module match pattern must be provided")
+		return fmt.Errorf("the module match pattern must be provided")
 	}
 
 	if formatAsDotGraph {
 		return fmt.Errorf("DOT graph output is not supported for this command")
 	}
-	formatAsJSON = formatAsJSON || !(formatAsList || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatTemplate != "") {
-		return fmt.Errorf("Only one of --json, --list, or --format may be specified")
+		return fmt.Errorf("only one of --json, --list, or --format may be specified")
 	}
 
 	updateSpinner, stopSpinner := startSpinner()
@@ -212,7 +210,7 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(args) != 1 {
-		return fmt.Errorf("The root module name/version must be provided")
+		return fmt.Errorf("the root module name/version must be provided")
 	}
 
 	var rootMod module.Version
@@ -224,15 +222,14 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		rootMod.Path = toks[0]
 		rootMod.Version = toks[1]
 	default:
-		return fmt.Errorf("Invalid module path/version %q", args[0])
+		return fmt.Errorf("invalid module path/version %q", args[0])
 	}
 	if err := module.CheckPath(rootMod.Path); err != nil {
-		return fmt.Errorf("The specified module name %q is invalid: %w", rootMod, err)
+		return fmt.Errorf("the specified module name %q is invalid: %w", rootMod, err)
 	}
 
-	formatAsJSON = formatAsJSON || !(formatAsList || formatAsDotGraph || formatTemplate != "")
 	if !xor(formatAsJSON, formatAsList, formatAsDotGraph, formatTemplate != "") {
-		return fmt.Errorf("Only one of --json, --list, --dot, or --format may be specified")
+		return fmt.Errorf("only one of --json, --list, --dot, or --format may be specified")
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -271,13 +268,13 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		tt, err = tt.Parse(formatTemplate)
 		if err != nil {
 			stopSpinner()
-			return fmt.Errorf("Invalid Go text template specified: %w", err)
+			return fmt.Errorf("invalid Go text template specified: %w", err)
 		}
 		list := flattenTree(tree, updateSpinner)
 		stopSpinner()
 		for _, e := range list {
 			if err := tt.Execute(os.Stdout, e); err != nil {
-				return fmt.Errorf("Error applying Go text template: %w", err)
+				return fmt.Errorf("error applying Go text template: %w", err)
 			}
 			os.Stdout.WriteString("\n")
 		}
@@ -291,12 +288,12 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		stopSpinner()
 		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
 		defer func() { _ = tw.Flush() }()
-		if _, err := tw.Write([]byte(col1Label + "\tDirect\n")); err != nil {
-			return fmt.Errorf("Error writing tabular output: %w", err)
+		if _, err := fmt.Fprintf(tw, col1Label+"\tDirect\n"); err != nil {
+			return fmt.Errorf("error writing tabular output: %w", err)
 		}
 		for _, e := range list {
-			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%v\n", e.Name(), e.IsDirect))); err != nil {
-				return fmt.Errorf("Error writing tabular output: %w", err)
+			if _, err := fmt.Fprintf(tw, "%s\t%v\n", e.Name(), e.IsDirect); err != nil {
+				return fmt.Errorf("error writing tabular output: %w", err)
 			}
 		}
 
@@ -355,7 +352,7 @@ func lookupLatestModuleVersion(ctx context.Context, c perseusapiconnect.PerseusS
 		return "", err
 	}
 	if len(resp.Msg.Modules) == 0 || len(resp.Msg.Modules[0].Versions) == 0 {
-		return "", fmt.Errorf("No version found for module %s", modulePath)
+		return "", fmt.Errorf("no version found for module %s", modulePath)
 	}
 
 	return resp.Msg.Modules[0].Versions[0], nil
@@ -432,7 +429,7 @@ func listModules(ctx context.Context, ps perseusapiconnect.PerseusServiceClient,
 			return ps.ListModules(ctx, req)
 		})
 		if err != nil {
-			return nil, fmt.Errorf("Unable to list modules matching the provided filter: %w", err)
+			return nil, fmt.Errorf("unable to list modules matching the provided filter: %w", err)
 		}
 		for _, mod := range resp.Msg.Modules {
 			item := dependencyItem{
@@ -669,11 +666,11 @@ func writeResults(w io.Writer, results []dependencyItem) error {
 		tt := template.New("item")
 		tt, err = tt.Parse(formatTemplate)
 		if err != nil {
-			return fmt.Errorf("Invalid Go text template specified: %w", err)
+			return fmt.Errorf("invalid Go text template specified: %w", err)
 		}
 		for _, e := range results {
 			if err := tt.Execute(w, e); err != nil {
-				return fmt.Errorf("Error applying Go text template: %w", err)
+				return fmt.Errorf("error applying Go text template: %w", err)
 			}
 			fmt.Fprintln(w)
 		}
@@ -683,11 +680,11 @@ func writeResults(w io.Writer, results []dependencyItem) error {
 		tw := tabwriter.NewWriter(w, 10, 4, 2, ' ', 0)
 		defer func() { _ = tw.Flush() }()
 		if _, err := tw.Write([]byte("Module\tVersion\n")); err != nil {
-			return fmt.Errorf("Error writing tabular output: %w", err)
+			return fmt.Errorf("error writing tabular output: %w", err)
 		}
 		for _, e := range results {
-			if _, err := tw.Write([]byte(fmt.Sprintf("%s\t%s\n", e.Path, e.Version))); err != nil {
-				return fmt.Errorf("Error writing tabular output: %w", err)
+			if _, err := fmt.Fprintf(tw, "%s\t%s\n", e.Path, e.Version); err != nil {
+				return fmt.Errorf("error writing tabular output: %w", err)
 			}
 		}
 
