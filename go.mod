@@ -4,7 +4,7 @@ go 1.23.0
 
 require (
 	connectrpc.com/connect v1.18.1
-	connectrpc.com/otelconnect v0.7.1
+	connectrpc.com/otelconnect v0.7.2
 	connectrpc.com/vanguard v0.3.0
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/bufbuild/httplb v0.4.1
