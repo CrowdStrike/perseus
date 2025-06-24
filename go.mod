@@ -7,7 +7,7 @@ require (
 	connectrpc.com/otelconnect v0.7.1
 	connectrpc.com/vanguard v0.3.0
 	github.com/Masterminds/squirrel v1.5.4
-	github.com/bufbuild/httplb v0.3.0
+	github.com/bufbuild/httplb v0.4.1
 	github.com/go-git/go-git/v5 v5.16.2
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3
 	github.com/jackc/pgx/v4 v4.18.3
