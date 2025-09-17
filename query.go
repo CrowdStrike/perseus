@@ -288,7 +288,7 @@ func runQueryModuleGraphCmd(cmd *cobra.Command, args []string) error {
 		stopSpinner()
 		tw := tabwriter.NewWriter(os.Stdout, 10, 4, 2, ' ', 0)
 		defer func() { _ = tw.Flush() }()
-		if _, err := fmt.Fprintf(tw, col1Label+"\tDirect\n"); err != nil {
+		if _, err := fmt.Fprint(tw, col1Label+"\tDirect\n"); err != nil {
 			return fmt.Errorf("error writing tabular output: %w", err)
 		}
 		for _, e := range list {
