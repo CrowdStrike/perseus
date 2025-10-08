@@ -1,7 +1,7 @@
 connectrpc.com/connect v1.18.1 h1:PAg7CjSAGvscaf6YZKUefjoih5Z/qYkyaTrBW8xvYPw=
 connectrpc.com/connect v1.18.1/go.mod h1:0292hj1rnx8oFrStN7cB4jjVBeqs+Yx5yDIC2prWDO8=
-connectrpc.com/otelconnect v0.7.2 h1:WlnwFzaW64dN06JXU+hREPUGeEzpz3Acz2ACOmN8cMI=
-connectrpc.com/otelconnect v0.7.2/go.mod h1:JS7XUKfuJs2adhCnXhNHPHLz6oAaZniCJdSF00OZSew=
+connectrpc.com/otelconnect v0.8.0 h1:a4qrN4H8aEE2jAoCxheZYYfEjXMgVPyL9OzPQLBEFXU=
+connectrpc.com/otelconnect v0.8.0/go.mod h1:AEkVLjCPXra+ObGFCOClcJkNjS7zPaQSqvO0lCyjfZc=
 connectrpc.com/vanguard v0.3.0 h1:prUKFm8rYDwvpvnOSoqdUowPMK0tRA0pbSrQoMd6Zng=
 connectrpc.com/vanguard v0.3.0/go.mod h1:nxQ7+N6qhBiQczqGwdTw4oCqx1rDryIt20cEdECqToM=
 dario.cat/mergo v1.0.0 h1:AGCNq9Evsj31mOgNPcLyXc+4PNABt905YmuqPYYpBWk=
