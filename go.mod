@@ -3,7 +3,7 @@ module github.com/CrowdStrike/perseus
 go 1.24.0
 
 require (
-	connectrpc.com/connect v1.18.1
+	connectrpc.com/connect v1.19.1
 	connectrpc.com/otelconnect v0.8.0
 	connectrpc.com/vanguard v0.3.0
 	github.com/Masterminds/squirrel v1.5.4
@@ -22,7 +22,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
 	golang.org/x/mod v0.29.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c
-	google.golang.org/protobuf v1.36.8
+	google.golang.org/protobuf v1.36.9
 )
 
 require (
