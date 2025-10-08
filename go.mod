@@ -20,7 +20,7 @@ require (
 	github.com/theckman/yacspin v0.13.12
 	go.opentelemetry.io/otel/exporters/prometheus v0.60.0
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
-	golang.org/x/mod v0.27.0
+	golang.org/x/mod v0.29.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250818200422-3122310a409c
 	google.golang.org/protobuf v1.36.8
 )
