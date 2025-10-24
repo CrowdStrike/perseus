@@ -8,7 +8,7 @@ require (
 	connectrpc.com/vanguard v0.3.0
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/bufbuild/httplb v0.4.1
-	github.com/go-git/go-git/v5 v5.16.2
+	github.com/go-git/go-git/v5 v5.16.3
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.2
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/jmoiron/sqlx v1.4.0
